@@ -54,7 +54,7 @@ void SwapByteOrderCopy(
 namespace detail {
 
 void CopyLittleEndian(size_t element_size_in_bytes, gsl::span<const char> source_bytes, gsl::span<char> destination_bytes) {
-  if (endian::native == endian::little) {
+  IF_CONSTEXPR (endian::native == endian::little) {
     std::memcpy(destination_bytes.data(), source_bytes.data(), source_bytes.size_bytes());
   } else {
     SwapByteOrderCopy(element_size_in_bytes, source_bytes, destination_bytes);

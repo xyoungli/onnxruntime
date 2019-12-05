@@ -8,8 +8,15 @@
 #include "core/util/math_cpuonly.h"
 #include "core/mlas/inc/mlas.h"
 #include "core/platform/threadpool.h"
-#include <unsupported/Eigen/SpecialFunctions>
 
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 4127)
+#endif
+#include <unsupported/Eigen/SpecialFunctions>
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
 namespace onnxruntime {
 namespace contrib {
 

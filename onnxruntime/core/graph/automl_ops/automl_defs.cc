@@ -4,8 +4,6 @@
 #include "core/graph/constants.h"
 #include "core/graph/automl_ops/automl_defs.h"
 #include "core/graph/op.h"
-#include "onnx/defs/schema.h"
-#include "onnx/defs/shape_inference.h"
 
 namespace onnxruntime {
 namespace automl {

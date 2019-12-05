@@ -219,6 +219,12 @@ inline long long TimeDiffMicroSeconds(TimePoint start_time, TimePoint end_time) 
   return std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time).count();
 }
 
+#ifdef _WIN32
+#define IF_CONSTEXPR if constexpr
+#else
+#define IF_CONSTEXPR if
+#endif
+
 struct null_type {};
 inline std::string ToMBString(const std::string& s) { return s; }
 #ifdef _WIN32

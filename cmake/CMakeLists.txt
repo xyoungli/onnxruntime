@@ -12,11 +12,20 @@ set(CMAKE_POLICY_DEFAULT_CMP0069 NEW)
 include(CheckCXXCompilerFlag)
 include(CheckLanguage)
 
-# CentOS compiler is old but it does allow certain C++14 features
-# such as lambda captures and they are convinient
-# On the other hand it does not allow some others.
-# So we cant' regulate simply with the standard.
-set(CMAKE_CXX_STANDARD 14)
+if(NOT CMAKE_CXX_STANDARD)
+	if(WIN32)
+	  set(CMAKE_CXX_STANDARD 17)
+	else()
+	# CentOS compiler is old but it does allow certain C++14 features
+	# such as lambda captures and they are convinient
+	# On the other hand it does not allow some others.
+	# So we cant' regulate simply with the standard.
+	  set(CMAKE_CXX_STANDARD 14)
+	endif()
+endif()
+
+#If the current CXX standard is not 17, this definition is still harmless
+add_definitions(-D_SILENCE_ALL_CXX17_DEPRECATION_WARNINGS=1)
 
 # General C# prperties
 if (onnxruntime_BUILD_CSHARP)
@@ -416,12 +425,7 @@ if (WIN32)
     add_definitions(-DPLATFORM_WINDOWS -DNOGDI -DNOMINMAX -D_USE_MATH_DEFINES)
     # parallel build
     # These compiler opitions cannot be forwarded to NVCC, so cannot use add_compiler_options
-    string(APPEND CMAKE_CXX_FLAGS " /MP")
-    string(APPEND CMAKE_CXX_FLAGS
-      " /wd4503" # Decorated name length exceeded.
-      " /wd4127" # conditional expression is constant.
-      " /wd4146" # unary minus operator applied to unsigned type. Needed for Protobuf
-    )
+    string(APPEND CMAKE_CXX_FLAGS " /MP")    
     if (onnxruntime_ENABLE_STATIC_ANALYSIS)
         string(APPEND CMAKE_CXX_FLAGS
             " /analyze:WX- "

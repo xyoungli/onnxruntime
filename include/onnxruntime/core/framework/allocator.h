@@ -236,7 +236,7 @@ bool IAllocator::CalcMemSizeForArrayWithAlignment(size_t nmemb, size_t size, siz
       nmemb > 0 && max_size / nmemb < size) {
     return false;
   }
-  if (alignment == 0)
+  IF_CONSTEXPR(alignment == 0)
     *out = size * nmemb;
   else
     *out = (size * nmemb + alignment_mask) & ~static_cast<size_t>(alignment_mask);

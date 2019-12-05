@@ -15,9 +15,10 @@ namespace test {
 TEST(EndianTest, EndiannessDetection) {
   const uint16_t test_value = 0x1234;
   const char* test_value_first_byte = reinterpret_cast<const char*>(&test_value);
-  if (endian::native == endian::little) {
+  IF_CONSTEXPR(endian::native == endian::little) {
     EXPECT_EQ(*test_value_first_byte, 0x34);
-  } else if (endian::native == endian::big) {
+  }
+  else IF_CONSTEXPR(endian::native == endian::big) {
     EXPECT_EQ(*test_value_first_byte, 0x12);
   }
 }

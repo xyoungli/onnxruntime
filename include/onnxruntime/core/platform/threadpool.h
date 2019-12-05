@@ -7,17 +7,13 @@
 #include <functional>
 #include <memory>
 
-#if defined(__GNUC__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-parameter"
-#else
+#ifdef _MSC_VER
 #pragma warning(push)
 #pragma warning(disable : 4267)
+#pragma warning(disable : 4127)
 #endif
 #include <unsupported/Eigen/CXX11/ThreadPool>
-#if defined(__GNUC__)
-#pragma GCC diagnostic pop
-#else
+#ifdef _MSC_VER
 #pragma warning(pop)
 #endif
 

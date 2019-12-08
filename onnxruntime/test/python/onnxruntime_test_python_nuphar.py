@@ -110,8 +110,7 @@ class TestNuphar(unittest.TestCase):
 
         # run onnxruntime_perf_test
         onnxruntime_perf_test = os.path.join(cwd, 'onnxruntime_perf_test')
-        subprocess.run([onnxruntime_perf_test, '-e', 'nuphar', '-t', '20', bert_squad_model, '1.txt'], check=True, cwd=cwd)
-        subprocess.run([onnxruntime_perf_test, '-e', 'cpu', '-o', '99', '-t', '20', bert_squad_model, '1.txt'], check=True, cwd=cwd)
+        subprocess.run([onnxruntime_perf_test, '-e', 'nuphar', '-x', '1', '-t', '20', bert_squad_model, '1.txt'], check=True, cwd=cwd)
 
 
     def test_rnn_benchmark(self):

@@ -6,7 +6,6 @@
 #include "core/framework/allocatormgr.h"
 #include "core/framework/execution_provider.h"
 #include "core/graph/constants.h"
-#include "core/session/onnxruntime_c_api.h"
 
 namespace onnxruntime {
 // Information needed to construct ARM execution providers.
@@ -37,6 +36,9 @@ public:
   }
 
   std::shared_ptr<KernelRegistry> GetKernelRegistry() const override;
+
+private:
+
 };
 
 }  // namespace onnxruntime

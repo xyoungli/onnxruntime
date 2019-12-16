@@ -376,6 +376,13 @@ AddTest(
   DEPENDS ${all_dependencies}
 )
 
+AddTest(
+  TARGET cxxapi_model_test
+  SOURCES ${TEST_SRC_DIR}/model_test/cxxapi_model_test.cc
+  LIBS ${onnxruntime_test_providers_libs} ${onnxruntime_test_common_libs}
+  DEPENDS ${all_dependencies}
+)
+
 if (onnxruntime_USE_ARM)
   AddTest(
     TARGET arm_exe_provider_test
@@ -386,7 +393,6 @@ if (onnxruntime_USE_ARM)
     DEPENDS ${all_dependencies}
   )
 endif()
-
 
 if (SingleUnitTestProject)
   set(all_tests ${onnxruntime_test_common_src} ${onnxruntime_test_ir_src} ${onnxruntime_test_optimizer_src} ${onnxruntime_test_framework_src} ${onnxruntime_test_providers_src})

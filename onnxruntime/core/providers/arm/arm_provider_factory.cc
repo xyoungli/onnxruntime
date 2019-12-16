@@ -36,7 +36,8 @@ std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_ARM(in
 
 }  // namespace onnxruntime
 
-ORT_API_STATUS_IMPL(OrtSessionOptionsAppendExecutionProvider_ARM, _In_ OrtSessionOptions* options, int use_arena) {
-  options->provider_factories.push_back(onnxruntime::CreateExecutionProviderFactory_ARM(use_arena));
+ORT_API_STATUS_IMPL(OrtSessionOptionsAppendExecutionProvider_ARM, _In_ OrtSessionOptions* options,
+        int use_arena, PowerMode mode, int threads) {
+  options->provider_factories.push_back(onnxruntime::CreateExecutionProviderFactory_ARM(use_arena, mode, threads));
   return nullptr;
 }

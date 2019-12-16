@@ -71,6 +71,10 @@ function(AddTest)
     COMMAND ${_UT_TARGET} ${TEST_ARGS}
     WORKING_DIRECTORY $<TARGET_FILE_DIR:${_UT_TARGET}>
     )
+  add_custom_command(TARGET ${_UT_TARGET} POST_BUILD
+    COMMAND "${CMAKE_STRIP}" -s
+    "${_UT_TARGET}"
+    COMMENT "Strip debug symbols done on final executable file.")
 endfunction(AddTest)
 
 #Do not add '${TEST_SRC_DIR}/util/include' to your include directories directly
@@ -103,6 +107,11 @@ set(onnxruntime_test_framework_src_patterns
   "${TEST_SRC_DIR}/framework/*.cc"
   "${TEST_SRC_DIR}/framework/*.h"
   "${TEST_SRC_DIR}/platform/*.cc"
+  )
+
+set(onnxruntime_test_framework_src_basic
+  "${TEST_SRC_DIR}/framework/*.cc"
+  "${TEST_SRC_DIR}/framework/*.h"
   )
 
 if(WIN32)
@@ -268,6 +277,7 @@ set(ONNXRUNTIME_TEST_LIBS
     ${PROVIDERS_NNAPI}
     ${PROVIDERS_DML}
     ${PROVIDERS_ACL}
+    ${PROVIDERS_ARM}
     onnxruntime_optimizer
     onnxruntime_providers
     onnxruntime_util
@@ -308,6 +318,10 @@ file(GLOB onnxruntime_test_framework_src CONFIGURE_DEPENDS
   ${onnxruntime_test_framework_src_patterns}
   )
 
+file(GLOB onnxruntime_test_framework_src_basic_files CONFIGURE_DEPENDS
+  ${onnxruntime_test_framework_src_basic}
+  )
+
 #with auto initialize onnxruntime
 add_library(onnxruntime_test_utils_for_framework ${onnxruntime_test_utils_src})
 onnxruntime_add_include_to_target(onnxruntime_test_utils_for_framework onnxruntime_framework gtest onnx onnx_proto)
@@ -333,8 +347,46 @@ if (onnxruntime_USE_DNNL)
   target_compile_definitions(onnxruntime_test_utils PUBLIC USE_DNNL=1)
 endif()
 add_dependencies(onnxruntime_test_utils ${onnxruntime_EXTERNAL_DEPENDENCIES})
-target_include_directories(onnxruntime_test_utils PUBLIC "${TEST_SRC_DIR}/util/include" PRIVATE ${eigen_INCLUDE_DIRS} ${ONNXRUNTIME_ROOT})
+target_include_directories(onnxruntime_test_utils PUBLIC "${TEST_SRC_DIR}/util/include" "${TEST_SRC_DIR}/framework"
+  PRIVATE ${eigen_INCLUDE_DIRS} ${ONNXRUNTIME_ROOT})
 set_target_properties(onnxruntime_test_utils PROPERTIES FOLDER "ONNXRuntimeTest")
+
+## add test framework library for ut
+add_library(test_framework_basic ${onnxruntime_test_framework_src_basic_files})
+onnxruntime_add_include_to_target(test_framework_basic onnxruntime_framework gtest onnx onnx_proto)
+if (onnxruntime_USE_FULL_PROTOBUF)
+  target_compile_definitions(test_framework_basic PRIVATE USE_FULL_PROTOBUF=1)
+endif()
+if (onnxruntime_USE_DNNL)
+  target_compile_definitions(test_framework_basic PUBLIC USE_DNNL=1)
+endif()
+add_dependencies(test_framework_basic ${onnxruntime_EXTERNAL_DEPENDENCIES})
+target_include_directories(test_framework_basic PUBLIC "${TEST_SRC_DIR}/util/include" PRIVATE ${eigen_INCLUDE_DIRS} ${ONNXRUNTIME_ROOT})
+# Add the define for conditionally using the framework Environment class in TestEnvironment
+target_compile_definitions(test_framework_basic PUBLIC "HAVE_FRAMEWORK_LIB")
+set_target_properties(test_framework_basic PROPERTIES FOLDER "ONNXRuntimeTest")
+
+## add ut for each test
+AddTest(
+  TARGET cpu_lstm_test
+  SOURCES ${TEST_SRC_DIR}/providers/test_main.cc
+  ${TEST_SRC_DIR}/providers/cpu/rnn/deep_cpu_lstm_op_test.cc
+  ${TEST_SRC_DIR}/providers/provider_test_utils.cc
+  LIBS ${onnxruntime_test_providers_libs} ${onnxruntime_test_common_libs} test_framework_basic
+  DEPENDS ${all_dependencies}
+)
+
+if (onnxruntime_USE_ARM)
+  AddTest(
+    TARGET arm_exe_provider_test
+    SOURCES ${TEST_SRC_DIR}/providers/test_main.cc
+    ${TEST_SRC_DIR}/providers/arm/arm_execution_provider_test.cc
+    ${TEST_SRC_DIR}/providers/provider_test_utils.cc
+    LIBS ${onnxruntime_test_providers_libs} ${onnxruntime_test_common_libs} test_framework_basic
+    DEPENDS ${all_dependencies}
+  )
+endif()
+
 
 if (SingleUnitTestProject)
   set(all_tests ${onnxruntime_test_common_src} ${onnxruntime_test_ir_src} ${onnxruntime_test_optimizer_src} ${onnxruntime_test_framework_src} ${onnxruntime_test_providers_src})
@@ -367,24 +419,6 @@ if (SingleUnitTestProject)
     LIBS ${onnxruntime_test_providers_libs} ${onnxruntime_test_common_libs}
     DEPENDS ${all_dependencies}
   )
-  add_custom_command(TARGET onnxruntime_test_all POST_BUILD
-    COMMAND "${CMAKE_STRIP}" -s
-    "onnxruntime_test_all"
-    COMMENT "Strip debug symbols done on final executable file.")
-
-  AddTest(
-    TARGET cpu_lstm_test
-    SOURCES ${TEST_SRC_DIR}/providers/test_main.cc
-            ${TEST_SRC_DIR}/providers/cpu/rnn/deep_cpu_lstm_op_test.cc
-            ${TEST_SRC_DIR}/providers/provider_test_utils.cc
-            ${onnxruntime_test_framework_src}
-    LIBS ${onnxruntime_test_providers_libs} ${onnxruntime_test_common_libs}
-    DEPENDS ${all_dependencies}
-  )
-  add_custom_command(TARGET cpu_lstm_test POST_BUILD
-    COMMAND "${CMAKE_STRIP}" -s
-    "cpu_lstm_test"
-    COMMENT "Strip debug symbols done on final executable file.")
 
   # the default logger tests conflict with the need to have an overall default logger
   # so skip in this type of
@@ -443,12 +477,6 @@ AddTest(
   LIBS  onnxruntime_test_utils ${ONNXRUNTIME_TEST_LIBS}
   DEPENDS ${onnxruntime_EXTERNAL_DEPENDENCIES}
 )
-
-add_custom_command(TARGET onnxruntime_test_framework_session_without_environment_standalone POST_BUILD
-  COMMAND "${CMAKE_STRIP}" -s
-  "onnxruntime_test_framework_session_without_environment_standalone"
-  COMMENT "Strip debug symbols done on final executable file.")
-
 
 #
 # onnxruntime_ir_graph test data
@@ -642,8 +670,6 @@ if (WIN32)
   SET(SYS_PATH_LIB shlwapi)
 endif()
 
-
-
 if (onnxruntime_BUILD_SHARED_LIB)
   set(onnxruntime_perf_test_libs onnxruntime_test_utils onnx_test_runner_common onnxruntime_common re2
           onnx_test_data_proto onnx_proto libprotobuf ${GETOPT_LIB_WIDE} onnxruntime ${onnxruntime_EXTERNAL_LIBRARIES}
@@ -690,12 +716,6 @@ AddTest(
   LIBS ${onnxruntime_test_providers_libs} ${onnxruntime_test_common_libs}
   DEPENDS ${onnxruntime_test_providers_dependencies}
 )
-
-add_custom_command(TARGET opaque_api_test POST_BUILD
-  COMMAND "${CMAKE_STRIP}" -s
-  "opaque_api_test"
-  COMMENT "Strip debug symbols done on final executable file.")
-
 
 if (onnxruntime_ENABLE_LANGUAGE_INTEROP_OPS)
   target_link_libraries(opaque_api_test PRIVATE onnxruntime_language_interop onnxruntime_pyop)

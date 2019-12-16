@@ -12,16 +12,16 @@ constexpr const char* ARM = "Arm";
 namespace onnxruntime {
 namespace arm {
 // Forward declarations of op kernels
-class ONNX_OPERATOR_KERNEL_CLASS_NAME(kArmExecutionProvider, kOnnxDomain, 7, LSTM);
+//class ONNX_OPERATOR_KERNEL_CLASS_NAME(kArmExecutionProvider, kOnnxDomain, 7, LSTM);
 
 Status RegisterArmKernels(KernelRegistry &kernel_registry) {
-  static const BuildKernelCreateInfoFn function_table[] = {
-          BuildKernelCreateInfo<ONNX_OPERATOR_KERNEL_CLASS_NAME(kArmExecutionProvider, kOnnxDomain, 7, LSTM)>,
-  };
-
-  for (auto &function_table_entry : function_table) {
-    ORT_RETURN_IF_ERROR(kernel_registry.Register(function_table_entry()));
-  }
+//  static const BuildKernelCreateInfoFn function_table[] = {
+//          BuildKernelCreateInfo<ONNX_OPERATOR_KERNEL_CLASS_NAME(kArmExecutionProvider, kOnnxDomain, 7, LSTM)>,
+//  };
+//
+//  for (auto &function_table_entry : function_table) {
+//    ORT_RETURN_IF_ERROR(kernel_registry.Register(function_table_entry()));
+//  }
   return Status::OK();
 }
 
@@ -38,7 +38,7 @@ ARMExecutionProvider::ARMExecutionProvider(const ARMExecutionProviderInfo& info)
   ORT_UNUSED_PARAMETER(info);
 
   auto default_allocator_factory = [](int) {
-    auto memory_info = onnxruntime::make_unique<OrtMemoryInfo>(ARM, OrtAllocatorType::OrtDeviceAllocator);
+    auto memory_info = onnxruntime::make_unique<OrtMemoryInfo>(CPU, OrtAllocatorType::OrtDeviceAllocator);
     return onnxruntime::make_unique<CPUAllocator>(std::move(memory_info));
   };
 

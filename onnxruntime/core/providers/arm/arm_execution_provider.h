@@ -6,14 +6,17 @@
 #include "core/framework/allocatormgr.h"
 #include "core/framework/execution_provider.h"
 #include "core/graph/constants.h"
+#include "core/session/onnxruntime_c_api.h"
 
 namespace onnxruntime {
 // Information needed to construct ARM execution providers.
 struct ARMExecutionProviderInfo {
   bool create_arena{true};
+  PowerMode mode{PowerMode::ARM_POWER_NO_BIND};
+  int threads{1};
 
-  explicit ARMExecutionProviderInfo(bool use_arena)
-          : create_arena(use_arena) {}
+  explicit ARMExecutionProviderInfo(bool use_arena, PowerMode power_mode, int num_threads=1)
+          : create_arena(use_arena), mode(power_mode), threads(num_threads) {}
 
   ARMExecutionProviderInfo() = default;
 };

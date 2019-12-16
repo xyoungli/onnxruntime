@@ -31,7 +31,7 @@ if(NOT WIN32)
   endif()
 endif()
 
-add_subdirectory(${PROJECT_SOURCE_DIR}/external/grpc EXCLUDE_FROM_ALL)
+add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/external/grpc EXCLUDE_FROM_ALL)
 if(NOT WIN32)
   if(onnxruntime_DEV_MODE) # Reenable Werror for our code subdirectories.
       if(NOT onnxruntime_USE_TVM)

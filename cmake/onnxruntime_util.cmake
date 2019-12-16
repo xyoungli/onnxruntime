@@ -15,7 +15,7 @@ if(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" OR CMAKE_SYSTEM_PROCESSOR STREQUAL "
   set_source_files_properties("${ONNXRUNTIME_ROOT}/core/util/gemmlowp_common.cc" PROPERTIES COMPILE_FLAGS "-msse4.1")
 endif()
 
-set(gemmlowp_src ${PROJECT_SOURCE_DIR}/external/gemmlowp)
+set(gemmlowp_src ${CMAKE_CURRENT_LIST_DIR}/external/gemmlowp)
 
 add_library(onnxruntime_util ${onnxruntime_util_srcs})
 target_include_directories(onnxruntime_util PRIVATE ${ONNXRUNTIME_ROOT} ${MKLML_INCLUDE_DIR} ${gemmlowp_src} PUBLIC ${eigen_INCLUDE_DIRS})

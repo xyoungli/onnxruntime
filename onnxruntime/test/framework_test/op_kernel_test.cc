@@ -9,7 +9,7 @@
 #include "core/graph/op.h"
 #include "core/providers/cpu/cpu_execution_provider.h"
 #include "gtest/gtest.h"
-#include "test_utils.h"
+#include "../framework/test_utils.h"
 using namespace std;
 using namespace ONNX_NAMESPACE;
 

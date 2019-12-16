@@ -4,6 +4,14 @@
 # Minimum CMake required
 cmake_minimum_required(VERSION 3.13)
 
+set(ANDROID_NDK "/Users/lixiaoyang/android-ndk-r17c")
+set(CMAKE_TOOLCHAIN_FILE ${ANDROID_NDK}/build/cmake/android.toolchain.cmake)
+set(ANDROID_NATIVE_API_LEVEL 25)
+set(ANDROID_TOOLCHAIN clang)
+#set(ANDROID_ABI "armeabi-v7a with NEON")
+set(ANDROID_ABI "arm64-v8a")
+
+
 # Project
 project(onnxruntime C CXX)
 cmake_policy(SET CMP0069 NEW)
@@ -55,7 +63,7 @@ option(onnxruntime_USE_NNAPI "Build with DNNLibrary for Android NNAPI support" O
 option(onnxruntime_USE_DNNL "Build with DNNL support" OFF)
 option(onnxruntime_USE_MKLML "Build DNNL with MKL-ML binary dependency" OFF)
 option(onnxruntime_USE_GEMMLOWP "Build with gemmlowp for quantized gemm" OFF)
-option(onnxruntime_USE_AUTOML "Build AutoML support" ON)
+option(onnxruntime_USE_AUTOML "Build AutoML support" OFF)
 option(onnxruntime_USE_NGRAPH "Build with nGraph support" OFF)
 option(onnxruntime_USE_OPENBLAS "Use openblas" OFF)
 option(onnxruntime_DEV_MODE "Enable developer warnings and treat most of them as error." OFF)
@@ -67,7 +75,7 @@ option(onnxruntime_BUILD_BENCHMARKS "Build ONNXRuntime micro-benchmarks" OFF)
 option(onnxruntime_USE_TVM "Build tvm for code-gen" OFF)
 option(onnxruntime_BUILD_FOR_NATIVE_MACHINE "Enable this option for turning on optimization specific to this machine" OFF)
 option(onnxruntime_USE_LLVM "Build tvm with LLVM" OFF)
-option(onnxruntime_USE_OPENMP "Build with OpenMP support" OFF)
+option(onnxruntime_USE_OPENMP "Build with OpenMP support" ON)
 option(onnxruntime_BUILD_SHARED_LIB "Build a shared library" OFF)
 option(onnxruntime_ENABLE_MICROSOFT_INTERNAL "Use this option to enable/disable microsoft internal only code" OFF)
 option(onnxruntime_USE_NUPHAR "Build with Nuphar" OFF)
@@ -144,10 +152,10 @@ if(onnxruntime_ENABLE_LTO)
     endif()
 endif()
 
-
-set(REPO_ROOT ${PROJECT_SOURCE_DIR}/..)
-set(ONNXRUNTIME_ROOT ${PROJECT_SOURCE_DIR}/../onnxruntime)
+set(REPO_ROOT ${PROJECT_SOURCE_DIR}/)
+set(ONNXRUNTIME_ROOT ${PROJECT_SOURCE_DIR}/onnxruntime)
 file (STRINGS "${REPO_ROOT}/VERSION_NUMBER" ORT_VERSION)
+set(PROJECT_CMAKE ${PROJECT_SOURCE_DIR}/cmake/)
 
 # Guarantee that the Eigen code that you are #including is licensed
 # under the MPL2 and possibly more permissive licenses (like BSD).
@@ -260,13 +268,13 @@ if(onnxruntime_BUILD_BENCHMARKS)
     set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "Disable benchmark testing as we don't need it.")
     # We will not need to install benchmark since we link it statically.
     set(BENCHMARK_ENABLE_INSTALL OFF CACHE BOOL "Disable benchmark install to avoid overwriting vendor install.")
-    add_subdirectory(${PROJECT_SOURCE_DIR}/external/onnx/third_party/benchmark EXCLUDE_FROM_ALL)
+    add_subdirectory(${PROJECT_CMAKE}/external/onnx/third_party/benchmark EXCLUDE_FROM_ALL)
   endif()
 endif()
 
-add_subdirectory(${PROJECT_SOURCE_DIR}/external/nsync EXCLUDE_FROM_ALL)
+add_subdirectory(${PROJECT_CMAKE}/external/nsync EXCLUDE_FROM_ALL)
 # External dependencies
-list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/external)
+list(APPEND CMAKE_MODULE_PATH ${PROJECT_CMAKE}/external)
 
 #Here we support two build mode:
 #1. if ONNX_CUSTOM_PROTOC_EXECUTABLE is set, build Protobuf from source, except protoc.exe. This mode is mainly
@@ -275,7 +283,7 @@ list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/external)
 
 
 # use protobuf as a submodule
-add_subdirectory(${PROJECT_SOURCE_DIR}/external/protobuf/cmake EXCLUDE_FROM_ALL)
+add_subdirectory(${PROJECT_CMAKE}/external/protobuf/cmake EXCLUDE_FROM_ALL)
 set_target_properties(libprotobuf PROPERTIES FOLDER "External/Protobuf")
 set_target_properties(libprotobuf-lite PROPERTIES FOLDER "External/Protobuf")
 set_target_properties(libprotoc PROPERTIES FOLDER "External/Protobuf")
@@ -292,7 +300,7 @@ if(UNIX AND onnxruntime_ENABLE_LTO)
   target_link_options(protoc PRIVATE "-Wl,--no-as-needed")
 endif()
 
-include(protobuf_function.cmake)
+include(${PROJECT_CMAKE}/protobuf_function.cmake)
 
 if (onnxruntime_DISABLE_CONTRIB_OPS)
   add_definitions(-DDISABLE_CONTRIB_OPS)
@@ -326,8 +334,8 @@ get_filename_component(ONNXRUNTIME_ROOT "${ONNXRUNTIME_ROOT}" ABSOLUTE)
 get_filename_component(REPO_ROOT "${REPO_ROOT}" ABSOLUTE)
 set(ONNXRUNTIME_INCLUDE_DIR ${REPO_ROOT}/include/onnxruntime)
 
-add_subdirectory(external/date EXCLUDE_FROM_ALL)
-add_subdirectory(external/re2 EXCLUDE_FROM_ALL)
+add_subdirectory(${PROJECT_CMAKE}/external/date EXCLUDE_FROM_ALL)
+add_subdirectory(${PROJECT_CMAKE}/external/re2 EXCLUDE_FROM_ALL)
 set_target_properties(re2 PROPERTIES FOLDER "External/re2")
 
 # bounds checking behavior.
@@ -386,15 +394,15 @@ if (onnxruntime_USE_TVM)
     endif()
   endif()
 
-  add_subdirectory(${PROJECT_SOURCE_DIR}/external/tvm EXCLUDE_FROM_ALL)
+  add_subdirectory(${PROJECT_CMAKE}/external/tvm EXCLUDE_FROM_ALL)
   set_target_properties(tvm PROPERTIES FOLDER "External/tvm")
   set_target_properties(tvm_topi PROPERTIES FOLDER "External/tvm")
   set_target_properties(tvm_runtime PROPERTIES FOLDER "External/tvm")
   set_target_properties(nnvm_compiler PROPERTIES FOLDER "External/tvm")
 
-  set(TVM_INCLUDES ${PROJECT_SOURCE_DIR}/external/tvm/include
-    ${PROJECT_SOURCE_DIR}/external/tvm/3rdparty/dmlc-core/include
-    ${PROJECT_SOURCE_DIR}/external/tvm/3rdparty/dlpack/include
+  set(TVM_INCLUDES ${PROJECT_CMAKE}/external/tvm/include
+    ${PROJECT_CMAKE}/external/tvm/3rdparty/dmlc-core/include
+    ${PROJECT_CMAKE}/external/tvm/3rdparty/dlpack/include
     $<TARGET_PROPERTY:tvm,INTERFACE_INCLUDE_DIRECTORIES>
     $<TARGET_PROPERTY:tvm_topi,INTERFACE_INCLUDE_DIRECTORIES>
     $<TARGET_PROPERTY:nnvm_compiler,INTERFACE_INCLUDE_DIRECTORIES>)
@@ -412,7 +420,7 @@ if (onnxruntime_USE_TVM)
 endif()
 
 # ONNX
-add_subdirectory(onnx)
+add_subdirectory(${PROJECT_CMAKE}/onnx)
 
 #set_target_properties(gen_onnx_proto PROPERTIES FOLDER "External/ONNX")
 # fix a warning in onnx code we can't do anything about
@@ -531,6 +539,7 @@ if (onnxruntime_USE_JEMALLOC)
 endif()
 
 include_directories(
+  ${CMAKE_CURRENT_BINARY_DIR}
   ${ONNXRUNTIME_INCLUDE_DIR}
   ${REPO_ROOT}/include/onnxruntime/core/session
 )
@@ -612,7 +621,7 @@ if (onnxruntime_USE_OPENBLAS)
   endif()
 endif()
 
-configure_file(onnxruntime_config.h.in ${CMAKE_CURRENT_BINARY_DIR}/onnxruntime_config.h)
+configure_file(${PROJECT_CMAKE}/onnxruntime_config.h.in ${CMAKE_CURRENT_BINARY_DIR}/onnxruntime_config.h)
 
 if (onnxruntime_USE_CUDA)
   add_definitions(-DUSE_CUDA=1)
@@ -699,15 +708,15 @@ endif()
 #names in this var must match the directory names under onnxruntime/core/providers
 set(ONNXRUNTIME_PROVIDER_NAMES cpu)
 
-include(onnxruntime_common.cmake)
-include(onnxruntime_graph.cmake)
-include(onnxruntime_framework.cmake)
-include(onnxruntime_util.cmake)
+include(${PROJECT_CMAKE}/onnxruntime_common.cmake)
+include(${PROJECT_CMAKE}/onnxruntime_graph.cmake)
+include(${PROJECT_CMAKE}/onnxruntime_framework.cmake)
+include(${PROJECT_CMAKE}/onnxruntime_util.cmake)
 #The next file will define 'onnxruntime_libs' cmake var
-include(onnxruntime_providers.cmake)
-include(onnxruntime_optimizer.cmake)
-include(onnxruntime_session.cmake)
-include(onnxruntime_mlas.cmake)
+include(${PROJECT_CMAKE}/onnxruntime_providers.cmake)
+include(${PROJECT_CMAKE}/onnxruntime_optimizer.cmake)
+include(${PROJECT_CMAKE}/onnxruntime_session.cmake)
+include(${PROJECT_CMAKE}/onnxruntime_mlas.cmake)
 
 if(onnxruntime_USE_AUTOML)
   add_definitions(-DMICROSOFT_AUTOML)
@@ -757,7 +766,7 @@ if (onnxruntime_BUILD_UNIT_TESTS)
   # turned ON by the previous step when building a shared lib
   set(CMAKE_SKIP_BUILD_RPATH OFF)
   # gtest and gmock
-  add_subdirectory(${PROJECT_SOURCE_DIR}/external/googletest EXCLUDE_FROM_ALL)
+  add_subdirectory(${PROJECT_CMAKE}/external/googletest EXCLUDE_FROM_ALL)
   set_target_properties(gmock PROPERTIES FOLDER "External/GTest")
   set_target_properties(gmock_main PROPERTIES FOLDER "External/GTest")
   set_target_properties(gtest PROPERTIES FOLDER "External/GTest")
@@ -766,7 +775,7 @@ if (onnxruntime_BUILD_UNIT_TESTS)
     target_compile_options(gmock PRIVATE "-w")
     target_compile_options(gtest PRIVATE "-w")
   endif()
-  include(onnxruntime_unittests.cmake)
+  include(${PROJECT_CMAKE}/onnxruntime_unittests.cmake)
 endif()
 
 if (onnxruntime_BUILD_CSHARP)

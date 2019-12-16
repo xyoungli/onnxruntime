@@ -48,7 +48,7 @@ The Test phase will run all unit tests, and optionally the ONNX tests.
 Use the individual flags to only run the specified stages.
                                      ''')
     # Main arguments
-    parser.add_argument("--build_dir", required=True, help="Path to the build directory.")
+    parser.add_argument("--build_dir", default="/Users/lixiaoyang/github/onnxruntime/build/Mac", help="Path to the build directory.")
     parser.add_argument("--config", nargs="+", default=["Debug"],
                         choices=["Debug", "MinSizeRel", "Release", "RelWithDebInfo"],
                         help="Configuration(s) to build.")
@@ -161,6 +161,7 @@ Use the individual flags to only run the specified stages.
     parser.add_argument("--enable_multi_device_test", action='store_true', help="Test with multi-device. Mostly used for multi-device GPU")
     parser.add_argument("--use_dml", action='store_true', help="Build with DirectML.")
     parser.add_argument("--use_telemetry", action='store_true', help="Only official builds can set this flag to enable telemetry.")
+    parser.add_argument("--split_UT", action='store_true', help="separate unit test projects.")
     return parser.parse_args()
 
 def resolve_executable_path(command_or_path):
@@ -279,7 +280,7 @@ def setup_test_data(build_dir, configs):
 
 def generate_build_tree(cmake_path, source_dir, build_dir, cuda_home, cudnn_home, tensorrt_home, path_to_protoc_exe, configs, cmake_extra_defines, args, cmake_extra_args):
     log.info("Generating CMake build tree")
-    cmake_dir = os.path.join(source_dir, "cmake")
+    cmake_dir = os.path.join(source_dir)#, "cmake"
     # TODO: fix jemalloc build so it does not conflict with onnxruntime shared lib builds. (e.g. onnxuntime_pybind)
     # for now, disable jemalloc if pybind is also enabled.
     cmake_args = [cmake_path, cmake_dir,
@@ -333,6 +334,7 @@ def generate_build_tree(cmake_path, source_dir, build_dir, cuda_home, cudnn_home
                  "-Donnxruntime_ENABLE_LANGUAGE_INTEROP_OPS=" + ("ON" if args.enable_language_interop_ops or (args.config != 'Debug' and bool(os.getenv('NIGHTLY_BUILD') == '1')) else "OFF"),
                  "-Donnxruntime_USE_DML=" + ("ON" if args.use_dml else "OFF"),
                  "-Donnxruntime_USE_TELEMETRY=" + ("ON" if args.use_telemetry else "OFF"),
+                  "-Donnxruntime_SPLIT_UNIT_TEST_PROJECTS=" + ("ON" if args.split_UT else "OFF"),
                  ]
     if args.use_brainslice:
         bs_pkg_name = args.brain_slice_package_name.split('.', 1)

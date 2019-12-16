@@ -367,6 +367,24 @@ if (SingleUnitTestProject)
     LIBS ${onnxruntime_test_providers_libs} ${onnxruntime_test_common_libs}
     DEPENDS ${all_dependencies}
   )
+  add_custom_command(TARGET onnxruntime_test_all POST_BUILD
+    COMMAND "${CMAKE_STRIP}" -s
+    "onnxruntime_test_all"
+    COMMENT "Strip debug symbols done on final executable file.")
+
+  AddTest(
+    TARGET cpu_lstm_test
+    SOURCES ${TEST_SRC_DIR}/providers/test_main.cc
+            ${TEST_SRC_DIR}/providers/cpu/rnn/deep_cpu_lstm_op_test.cc
+            ${TEST_SRC_DIR}/providers/provider_test_utils.cc
+            ${onnxruntime_test_framework_src}
+    LIBS ${onnxruntime_test_providers_libs} ${onnxruntime_test_common_libs}
+    DEPENDS ${all_dependencies}
+  )
+  add_custom_command(TARGET cpu_lstm_test POST_BUILD
+    COMMAND "${CMAKE_STRIP}" -s
+    "cpu_lstm_test"
+    COMMENT "Strip debug symbols done on final executable file.")
 
   # the default logger tests conflict with the need to have an overall default logger
   # so skip in this type of
@@ -421,10 +439,15 @@ endif()  # SingleUnitTestProject
 # the normal test executables set up a default runtime environment, which we don't want here
 AddTest(
   TARGET onnxruntime_test_framework_session_without_environment_standalone
-  SOURCES "${TEST_SRC_DIR}/framework/inference_session_without_environment/inference_session_without_environment_standalone_test.cc" "${TEST_SRC_DIR}/framework/test_main.cc"
+  SOURCES "${TEST_SRC_DIR}/framework_test/inference_session_without_environment/inference_session_without_environment_standalone_test.cc" "${TEST_SRC_DIR}/framework_test/test_main.cc"
   LIBS  onnxruntime_test_utils ${ONNXRUNTIME_TEST_LIBS}
   DEPENDS ${onnxruntime_EXTERNAL_DEPENDENCIES}
 )
+
+add_custom_command(TARGET onnxruntime_test_framework_session_without_environment_standalone POST_BUILD
+  COMMAND "${CMAKE_STRIP}" -s
+  "onnxruntime_test_framework_session_without_environment_standalone"
+  COMMENT "Strip debug symbols done on final executable file.")
 
 
 #
@@ -479,6 +502,7 @@ if(WIN32)
   endif()
 endif()
 
+include_directories(${CMAKE_CURRENT_BINARY_DIR}/cmake/onnx/)
 add_library(onnx_test_data_proto ${TEST_SRC_DIR}/proto/tml.proto)
 if(WIN32)
     target_compile_options(onnx_test_data_proto PRIVATE "/wd4125" "/wd4456" "/wd4100")
@@ -580,9 +604,9 @@ if(WIN32)
 endif()
 
 add_test(NAME onnx_test_pytorch_converted
-  COMMAND onnx_test_runner ${PROJECT_SOURCE_DIR}/external/onnx/onnx/backend/test/data/pytorch-converted)
+  COMMAND onnx_test_runner ${CMAKE_CURRENT_LIST_DIR}/external/onnx/onnx/backend/test/data/pytorch-converted)
 add_test(NAME onnx_test_pytorch_operator
-  COMMAND onnx_test_runner ${PROJECT_SOURCE_DIR}/external/onnx/onnx/backend/test/data/pytorch-operator)
+  COMMAND onnx_test_runner ${CMAKE_CURRENT_LIST_DIR}/external/onnx/onnx/backend/test/data/pytorch-operator)
 
 #perf test runner
 set(onnxruntime_perf_test_src_dir ${TEST_SRC_DIR}/perftest)
@@ -653,6 +677,12 @@ AddTest(
   LIBS ${onnxruntime_test_providers_libs} ${onnxruntime_test_common_libs}
   DEPENDS ${onnxruntime_test_providers_dependencies}
 )
+
+add_custom_command(TARGET opaque_api_test POST_BUILD
+  COMMAND "${CMAKE_STRIP}" -s
+  "opaque_api_test"
+  COMMENT "Strip debug symbols done on final executable file.")
+
 
 if (onnxruntime_ENABLE_LANGUAGE_INTEROP_OPS)
   target_link_libraries(opaque_api_test PRIVATE onnxruntime_language_interop onnxruntime_pyop)

@@ -15,7 +15,7 @@ See [this](../onnxruntime/test/shared_lib/test_inference.cc) for an example call
 * Register the custom registry with ONNXRuntime using RegisterCustomRegistry API.
 
 See
-[this](../onnxruntime/test/framework/local_kernel_registry_test.cc) for an example.
+[this](../onnxruntime/test/framework_test/local_kernel_registry_test.cc) for an example.
 
 ### 3. Contributing the op to ONNXRuntime
 This is mostly meant for ops that are in the process of being proposed to ONNX. This way you don't have to wait for an approval from the ONNX team

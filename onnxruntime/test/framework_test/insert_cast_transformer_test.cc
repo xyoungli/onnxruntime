@@ -6,7 +6,7 @@
 #include "core/optimizer/insert_cast_transformer.h"
 #include "core/graph/model.h"
 #include "gtest/gtest.h"
-#include "test_utils.h"
+#include "../framework/test_utils.h"
 #include "test/test_environment.h"
 
 using namespace ONNX_NAMESPACE;

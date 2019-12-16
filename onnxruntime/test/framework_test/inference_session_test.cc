@@ -30,8 +30,8 @@
 #include "core/providers/cuda/gpu_data_transfer.h"
 #endif
 #include "core/session/IOBinding.h"
-#include "dummy_provider.h"
-#include "test_utils.h"
+#include "../framework/dummy_provider.h"
+#include "../framework/test_utils.h"
 #include "test/capturing_sink.h"
 #include "test/test_environment.h"
 #include "test/providers/provider_test_utils.h"

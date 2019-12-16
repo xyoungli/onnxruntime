@@ -6,7 +6,7 @@ set(featurizers_URL "https://github.com/microsoft/FeaturizersLibrary.git")
 set(featurizers_TAG "006df6bff45dac59d378609fe85f6736a901ee93")
 
 set(featurizers_pref FeaturizersLibrary)
-set(featurizers_ROOT ${PROJECT_SOURCE_DIR}/external/${featurizers_pref})
+set(featurizers_ROOT ${CMAKE_CURRENT_LIST_DIR}/${featurizers_pref})
 set(featurizers_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/external/${featurizers_pref})
 
 # Only due to GIT_CONFIG

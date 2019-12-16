@@ -10,7 +10,7 @@ if (WIN32)
 endif()
 # Cpp Tests were added and they require googletest
 # since we have our own copy, try using that
-set(ONNX_SOURCE_ROOT ${PROJECT_SOURCE_DIR}/external/onnx)
+set(ONNX_SOURCE_ROOT ${CMAKE_CURRENT_LIST_DIR}/../external/onnx)
 file(GLOB_RECURSE onnx_src CONFIGURE_DEPENDS
     "${ONNX_SOURCE_ROOT}/onnx/*.h"
     "${ONNX_SOURCE_ROOT}/onnx/*.cc"

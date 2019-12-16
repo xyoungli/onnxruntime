@@ -7,7 +7,7 @@
 #include "core/graph/model.h"
 #include "core/providers/cpu/cpu_execution_provider.h"
 #include "core/session/inference_session.h"
-#include "test_utils.h"
+#include "../framework/test_utils.h"
 #include "test/test_environment.h"
 
 #include "gtest/gtest.h"

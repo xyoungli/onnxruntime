@@ -114,7 +114,7 @@ Use the individual flags to only run the specified stages.
     parser.add_argument("--msvc_toolset", help="MSVC toolset to use. e.g. 14.11")
     parser.add_argument("--android", action='store_true', help='Build for Android')
     parser.add_argument("--android_abi", type=str, default='arm64-v8a',
-            help='')
+            help='arm64-v8a or armeabi-v7a with NEON')
     parser.add_argument("--android_api", type=int, default=27,
             help='Android API Level, e.g. 21')
     parser.add_argument("--android_ndk_path", default="", help="Path to the Android NDK")
@@ -334,7 +334,8 @@ def generate_build_tree(cmake_path, source_dir, build_dir, cuda_home, cudnn_home
                  "-Donnxruntime_ENABLE_LANGUAGE_INTEROP_OPS=" + ("ON" if args.enable_language_interop_ops or (args.config != 'Debug' and bool(os.getenv('NIGHTLY_BUILD') == '1')) else "OFF"),
                  "-Donnxruntime_USE_DML=" + ("ON" if args.use_dml else "OFF"),
                  "-Donnxruntime_USE_TELEMETRY=" + ("ON" if args.use_telemetry else "OFF"),
-                  "-Donnxruntime_SPLIT_UNIT_TEST_PROJECTS=" + ("ON" if args.split_UT else "OFF"),
+                 "-Donnxruntime_SPLIT_UNIT_TEST_PROJECTS=" + ("ON" if args.split_UT else "OFF"),
+                 "-Donnxruntime_USE_ARM=" + ("ON" if 'arm' in args.android_abi or args.arm or args.arm64 else "OFF"),
                  ]
     if args.use_brainslice:
         bs_pkg_name = args.brain_slice_package_name.split('.', 1)

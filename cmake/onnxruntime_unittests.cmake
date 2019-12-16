@@ -576,6 +576,11 @@ target_link_libraries(onnx_test_runner PRIVATE onnx_test_runner_common ${GETOPT_
 target_include_directories(onnx_test_runner PRIVATE ${ONNXRUNTIME_ROOT})
 set_target_properties(onnx_test_runner PROPERTIES FOLDER "ONNXRuntimeTest")
 
+add_custom_command(TARGET onnx_test_runner POST_BUILD
+  COMMAND "${CMAKE_STRIP}" -s
+  "onnx_test_runner"
+  COMMENT "Strip debug symbols done on final executable file.")
+
 if (onnxruntime_USE_TVM)
   if (WIN32)
     target_link_options(onnx_test_runner PRIVATE "/STACK:4000000")
@@ -637,6 +642,8 @@ if (WIN32)
   SET(SYS_PATH_LIB shlwapi)
 endif()
 
+
+
 if (onnxruntime_BUILD_SHARED_LIB)
   set(onnxruntime_perf_test_libs onnxruntime_test_utils onnx_test_runner_common onnxruntime_common re2
           onnx_test_data_proto onnx_proto libprotobuf ${GETOPT_LIB_WIDE} onnxruntime ${onnxruntime_EXTERNAL_LIBRARIES}
@@ -665,6 +672,12 @@ if (onnxruntime_USE_TVM)
     target_link_options(onnxruntime_perf_test PRIVATE "/STACK:4000000")
   endif()
 endif()
+
+add_custom_command(TARGET onnxruntime_perf_test POST_BUILD
+  COMMAND "${CMAKE_STRIP}" -s
+  "onnxruntime_perf_test"
+  COMMENT "Strip debug symbols done on final executable file.")
+
 
 # Opaque API test can not be a part of the shared lib tests since it is using
 # C++ internals apis to register custom type, kernel and schema. It also can not

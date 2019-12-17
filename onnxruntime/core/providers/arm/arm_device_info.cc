@@ -553,25 +553,26 @@ void ARMDevice::SetFP32Info(int argc, ...) {
 void ARMDevice::SetCacheInfo(int cache_id, int argc, ...) {
   va_list arg_ptr;
   va_start(arg_ptr, argc);
-  std::vector<int> cache;
+  std::vector<int>* cache = nullptr;
   switch (cache_id) {
     case 0:
-      cache = info_.L1_cache;
+      cache = &info_.L1_cache;
       break;
     case 1:
-      cache = info_.L2_cache;
+      cache = &info_.L2_cache;
       break;
     case 2:
-      cache = info_.L3_cache;
+      cache = &info_.L3_cache;
       break;
     default:
+      assert(0);
       break;
   }
-  cache.resize(info_.core_num);
+  cache->resize(info_.core_num);
   if (argc == 1) {
     int cache_size = va_arg(arg_ptr, int);
     for (uint32_t i = 0; i < info_.core_num; ++i) {
-      cache[i] = cache_size;
+      (*cache)[i] = cache_size;
     }
   } else {
     int big_core_num = info_.big_core_ids.size();
@@ -579,10 +580,10 @@ void ARMDevice::SetCacheInfo(int cache_id, int argc, ...) {
     int big_core_cache_size = va_arg(arg_ptr, int);
     int little_core_cache_size = va_arg(arg_ptr, int);
     for (int i = 0; i < big_core_num; ++i) {
-      cache[info_.big_core_ids[i]] = big_core_cache_size;
+      (*cache)[info_.big_core_ids[i]] = big_core_cache_size;
     }
     for (int i = 0; i < little_core_num; ++i) {
-      cache[info_.little_core_ids[i]] = little_core_cache_size;
+      (*cache)[info_.little_core_ids[i]] = little_core_cache_size;
     }
   }
   va_end(arg_ptr);

@@ -37,6 +37,7 @@ public:
   }
 
   std::shared_ptr<KernelRegistry> GetKernelRegistry() const override;
+  std::unique_ptr<IDataTransfer> GetDataTransfer() const override;
 
   void SetRunMode(PowerMode mode, int threads);
   void SetCache(int L1_size, int L2_size, int L3_size);

@@ -35,7 +35,7 @@ ARMExecutionProvider::ARMExecutionProvider(const ARMExecutionProviderInfo& info)
         : IExecutionProvider{onnxruntime::kAclExecutionProvider} {
   mode_ = info.mode;
   threads_ = info.threads;
-  arm::ARMDevice::Global().Setup();
+  arm::ARMDevice::Global().Init();
 
   auto default_allocator_factory = [](int) {
     auto memory_info = onnxruntime::make_unique<OrtMemoryInfo>(CPU, OrtAllocatorType::OrtDeviceAllocator);
@@ -61,6 +61,11 @@ ARMExecutionProvider::ARMExecutionProvider(const ARMExecutionProviderInfo& info)
           std::numeric_limits<size_t>::max()};
 
   InsertAllocator(CreateAllocator(cpu_memory_info));
+  SetRunMode(mode_, threads_);
+}
+
+std::unique_ptr<IDataTransfer> ARMExecutionProvider::GetDataTransfer() const {
+  return onnxruntime::make_unique<CPUDataTransfer>();
 }
 
 ARMExecutionProvider::~ARMExecutionProvider() {}

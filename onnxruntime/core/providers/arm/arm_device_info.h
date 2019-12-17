@@ -75,8 +75,6 @@ public:
     return ret;
   }
 
-  int Setup();
-
   ARMArch GetArch(unsigned int active_id) const { return info_.archs[active_id > info_.core_num ? 0 : active_id]; }
   int L1Size(unsigned int active_id) const { return info_.L1_cache[active_id > info_.core_num ? 0 : active_id]; }
   int L2Size(unsigned int active_id) const { return info_.L2_cache[active_id > info_.core_num ? 0 : active_id]; }
@@ -93,6 +91,7 @@ public:
 
 private:
   ARMDevice() = default;
+  int Setup();
   ARMDeviceInfo info_;
   void SetDotInfo(int argc, ...);
   void SetFP16Info(int argc, ...);

@@ -159,7 +159,7 @@ void sgemm_prepacked_4x8(bool is_transB,
  * for arm-v7a, transform data to block x k x 6 layout
  * for arm-v8a, transform data to block x k x 8 layout
  */
-void prepackA(float *out,
+void PrepackA(float *out,
               const float *in,
               float alpha,
               int ldin,
@@ -170,6 +170,7 @@ void prepackA(float *out,
               bool is_trans,
               ARMExecutionProvider *ctx) {
 #ifdef __aarch64__
+  (void)(ctx);
   if (mmax <= 4) {
     if (is_trans) {
       pack_trans_m4(out, in, alpha, ldin, m0, mmax, k0, kmax);
@@ -201,20 +202,20 @@ void prepackA(float *out,
 }
 
 /// a: m*k  b: k*n  c: m*n
-void sgemm_prepack(bool is_transB,
-                   int M,
-                   int N,
-                   int K,
-                   const float *A_packed,
-                   const float *B,
-                   int ldb,
-                   float beta,
-                   float *C,
-                   int ldc,
-                   const float *bias,
-                   bool has_bias,
-                   bool has_relu,
-                   ARMExecutionProvider *ctx) {
+void SgemmPrepack(bool is_transB,
+                  int M,
+                  int N,
+                  int K,
+                  const float *A_packed,
+                  const float *B,
+                  int ldb,
+                  float beta,
+                  float *C,
+                  int ldc,
+                  const float *bias,
+                  bool has_bias,
+                  bool has_relu,
+                  ARMExecutionProvider *ctx) {
 #ifdef __aarch64__
   if (M <= 4) {
     sgemm_prepacked_4x4(is_transB,

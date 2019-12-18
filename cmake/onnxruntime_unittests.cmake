@@ -400,6 +400,14 @@ if (onnxruntime_USE_ARM)
     LIBS ${onnxruntime_test_providers_libs} ${onnxruntime_test_common_libs} test_framework_basic
     DEPENDS ${all_dependencies}
   )
+  AddTest(
+    TARGET arm_sgemm
+    SOURCES ${TEST_SRC_DIR}/providers/test_main.cc
+    ${TEST_SRC_DIR}/providers/arm/math/arm_sgemm_test.cc
+    ${TEST_SRC_DIR}/providers/provider_test_utils.cc
+    LIBS ${onnxruntime_test_providers_libs} ${onnxruntime_test_common_libs} test_framework_basic
+    DEPENDS ${all_dependencies}
+  )
 endif()
 
 if (SingleUnitTestProject)

@@ -24,9 +24,9 @@ const bool performance_test = true;
 namespace onnxruntime {
 namespace test {
 
-bool test_sgemv(bool tra, int m, int n, float alpha, int lda, float beta,
-                bool has_bias, bool has_relu, int cls, int ths,
-                int warmup_iter=0, int repeats=1, bool check_result=true) {
+bool TestSgemv(bool tra, int m, int n, float alpha, int lda, float beta,
+               bool has_bias, bool has_relu, int cls, int ths,
+               int warmup_iter=0, int repeats=1, bool check_result=true) {
   ARMExecutionProviderInfo info;
   info.threads = ths;
   info.mode = static_cast<PowerMode>(cls);
@@ -120,7 +120,7 @@ TEST(TestARMSgemv, Sgemv) {
                     for (auto &th : {1, 2, 4}) {
                       int lda = tra ? m : n;
                       lda += lda_inc;
-                      auto flag = test_sgemv(tra, m, n, alpha, lda, beta,
+                      auto flag = TestSgemv(tra, m, n, alpha, lda, beta,
                                              has_bias, has_relu, 0, th);
                       if (flag) {
                         std::cout << "test m = " << m << ", n=" << n
@@ -155,7 +155,7 @@ TEST(TestARMSgemv, Sgemv_performance) {
     int N = 512;
     for (auto& trans : {false, true}) {
       for (auto& th : {1, 2, 4}) {
-        test_sgemv(trans, M, N, 1.f, M, 0.f,
+        TestSgemv(trans, M, N, 1.f, M, 0.f,
                    false, false, 0, th, 50, 100, false);
       }
     }

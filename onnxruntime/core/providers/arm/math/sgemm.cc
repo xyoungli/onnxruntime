@@ -18,28 +18,38 @@
 namespace onnxruntime {
 namespace arm {
 
-//void sgemm(bool is_transA,
-//           bool is_transB,
-//           bool packedA,
-//           bool packedB,
-//           int M,
-//           int N,
-//           int K,
-//           float alpha,
-//           const float* A,
-//           int lda,
-//           const float* B,
-//           int ldb,
-//           float beta,
-//           float* C,
-//           int ldc,
-//           const float* bias,
-//           bool is_bias,
-//           bool is_relu,
-//           ARMExecutionProvider* ctx) {
-//  int hblock = get_hblock(ctx);
-//  int m_roundup = hblock * ((M + hblock - 1) / hblock);
-//}
+void Sgemm(bool transA,
+           bool transB,
+           int M,
+           int N,
+           int K,
+           float alpha,
+           const float* A,
+           int lda,
+           const float* B,
+           int ldb,
+           float beta,
+           float* C,
+           int ldc,
+           const float* bias,
+           bool is_bias,
+           bool is_relu,
+           ARMExecutionProvider* ctx) {
+  int hblock = GetSgemmHblock(ctx);
+  int m_roundup = hblock * ((M + hblock - 1) / hblock);
+  auto alloc_ptr = ctx->GetAllocator(0, OrtMemTypeDefault);
+
+  auto packed_A_ptr = static_cast<float*>(
+          alloc_ptr->Alloc(m_roundup * K * sizeof(float)));
+
+  PrepackA(packed_A_ptr, A, alpha, lda, 0, M, 0, K, transA, ctx);
+
+  SgemmPrepack(transB, M, N, K,
+               packed_A_ptr, B, ldb,
+               beta, C, ldc,
+               bias, is_bias, is_relu, ctx);
+  alloc_ptr->Free(packed_A_ptr);
+}
 
 }  // namespace arm
 }  // namespace onnxruntime

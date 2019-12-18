@@ -24,13 +24,13 @@ namespace arm {
 constexpr int MBLOCK = 8;
 constexpr int NBLOCK = 12;
 constexpr int KBLOCK = 4;
-inline int get_hblock(const ARMExecutionProvider* ctx) { return MBLOCK; }
+inline int GetSgemmHblock(const ARMExecutionProvider* ctx) { return MBLOCK; }
 #else
 constexpr int MBLOCK_A73 = 4;
 constexpr int MBLOCK_OTH = 6;
 constexpr int NBLOCK = 8;
 constexpr int KBLOCK = 4;
-inline int get_hblock(ARMExecutionProvider* ctx) {
+inline int GetSgemmHblock(ARMExecutionProvider* ctx) {
   if (ctx->arch() == kA73) {
     return MBLOCK_A73;
   } else {
@@ -39,7 +39,7 @@ inline int get_hblock(ARMExecutionProvider* ctx) {
 }
 #endif  // __aarch64__
 
-void prepackA(float* out,
+void PrepackA(float* out,
               const float* in,
               float alpha,
               int ldin,
@@ -50,20 +50,20 @@ void prepackA(float* out,
               bool is_trans,
               ARMExecutionProvider* ctx);
 
-void sgemm_prepack(bool is_transB,
-                   int M,
-                   int N,
-                   int K,
-                   const float* A_packed,
-                   const float* B,
-                   int ldb,
-                   float beta,
-                   float* C,
-                   int ldc,
-                   const float* bias,
-                   bool has_bias,
-                   bool has_relu,
-                   ARMExecutionProvider* ctx);
+void SgemmPrepack(bool is_transB,
+                  int M,
+                  int N,
+                  int K,
+                  const float* A_packed,
+                  const float* B,
+                  int ldb,
+                  float beta,
+                  float* C,
+                  int ldc,
+                  const float* bias,
+                  bool has_bias,
+                  bool has_relu,
+                  ARMExecutionProvider* ctx);
 
 }  // namespace arm
 }  // namespace onnxruntime

@@ -20,10 +20,8 @@
 namespace onnxruntime {
 namespace arm {
 
-void sgemm(bool is_transA,
-           bool is_transB,
-           bool packedA,
-           bool packedB,
+void Sgemm(bool transA,
+           bool transB,
            int M,
            int N,
            int K,
@@ -40,7 +38,7 @@ void sgemm(bool is_transA,
            bool is_relu,
            const ARMExecutionProvider* ctx);
 
-void packA(float* out,
+void PackA(float* out,
            const float* in,
            float alpha,
            int ldin,
@@ -49,7 +47,7 @@ void packA(float* out,
            bool trans,
            const ARMExecutionProvider* ctx);
 
-void packB(float* out,
+void PackB(float* out,
            const float* in,
            int ldin,
            int K,

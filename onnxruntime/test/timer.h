@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <chrono>  // NOLINT
 #include <vector>
+#include <numeric>
 
 namespace onnxruntime {
 

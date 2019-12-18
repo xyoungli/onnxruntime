@@ -13,9 +13,9 @@
 // limitations under the License.
 
 #include <gtest/gtest.h>
-#include "test/providers/arm/data_utils.h"
+#include "test/data_utils.h"
 #include "naive_math_impl.h"
-#include "../../timer.h"
+#include "test/timer.h"
 #include "core/providers/arm/math/sgemv.h"
 
 const bool precision_test = true;

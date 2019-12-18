@@ -41,19 +41,22 @@ bool test_sgemv(bool tra, int m, int n, float alpha, int lda, float beta,
   auto dy = static_cast<float *>(alloc->Alloc(m * sizeof(float)));
   auto dy_basic = static_cast<float *>(alloc->Alloc(m * sizeof(float)));
 
-  fill_data_rand(da, -1.f, 1.f, size_a);
-  fill_data_rand(dx, -1.f, 1.f, n);
-  fill_data_rand(dbias, -1.f, 1.f, m);
-  fill_data_rand(dy, -1.f, 1.f, m);
-//  fill_data_const(da, 1.f, size_a);
-//  fill_data_const(dx, 1.f, n);
-//  fill_data_const(dbias, 1.f, m);
-//  fill_data_const(dy, 1.f, m);
+//  fill_data_rand(da, -1.f, 1.f, size_a);
+//  fill_data_rand(dx, -1.f, 1.f, n);
+//  fill_data_rand(dbias, -1.f, 1.f, m);
+//  fill_data_rand(dy, -1.f, 1.f, m);
+  fill_data_const(da, 1.f, size_a);
+  fill_data_const(dx, 1.f, n);
+  fill_data_const(dbias, 1.f, m);
+  fill_data_const(dy, 1.f, m);
   memcpy(dy_basic, dy, m * sizeof(float));
 
   if (check_result) {
     basic_gemv(tra, m, n, alpha, da, lda, dx, 1, beta, dy_basic, 1, dbias, has_bias, has_relu);
   }
+
+  printf("finish basic sgemv\n");
+
   Timer t0;
   //! compute
   double ops = 2.0 * m * n;
@@ -108,7 +111,7 @@ TEST(TestARMSgemv, Sgemv) {
     std::cout << "run basic sgemv test";
     for (auto &m : {1, 3, 8, 21, 32, 397}) {
       for (auto &n : {1, 3, 8, 17, 59, 234}) {
-        for (auto &tra : {false}) {//true,
+        for (auto &tra : {true}) {
           for (auto& lda_inc : {0, 10}) {
             for (auto& alpha : {1.f, 0.5f}) {
               for (auto &beta : {0.f, 0.5f}) {
@@ -150,9 +153,11 @@ TEST(TestARMSgemv, Sgemv_performance) {
   if (performance_test) {
     int M = 512;
     int N = 512;
-    for (auto& th : {1, 2, 4}) {
-      test_sgemv(false, M, N, 1.f, M, 0.f,
-                 false, false, 0, th, 50, 100, false);
+    for (auto& trans : {false, true}) {
+      for (auto& th : {1, 2, 4}) {
+        test_sgemv(trans, M, N, 1.f, M, 0.f,
+                   false, false, 0, th, 50, 100, false);
+      }
     }
   }
 }

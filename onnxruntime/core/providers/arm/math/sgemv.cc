@@ -631,12 +631,7 @@ void SgemvT(int M,
   float zero_buf[M];
   float y_buf[valid_ths * M];
   memset(zero_buf, 0, M * sizeof(float));
-  if (with_bias) {
-    memcpy(y_buf, bias, M * sizeof(float));
-    memset(y_buf + M, 0, (valid_ths - 1) * M * sizeof(float));
-  } else {
-    memset(y_buf, 0, valid_ths * M * sizeof(float));
-  }
+  memset(y_buf, 0, valid_ths * M * sizeof(float));
 #pragma omp parallel for
   for (int t = 0; t < valid_ths; ++t) {
     float *block_y = y_buf + t * M;
@@ -833,32 +828,42 @@ void SgemvT(int M,
   }
 
   // deal with alpha and beta
-  float32x4_t valpha = vdupq_n_f32(alpha);
-  float32x4_t vbeta = vdupq_n_f32(alpha);
-  float32x4_t vzero = vdupq_n_f32(0.f);
-  float* y_buf_ptr = y_buf;
-  asm volatile(
-  "ld1  {v2.4s},  [%[out_y]]      \n" /*  load y to v2    */
-  "ld1  {v0.4s},  [%[in_y]], #16  \n" /*  load y_buf to v0    */
-  "1:\n"
-  "fmul v1.4s, v2.4s, %[beta].4s  \n" /* out * beta */
-  "ldr  q2,  [%[out_y], #16]      \n" /*  load y to v2    */
-  "fmla v1.4s, v0.4s, %[alpha].4s \n" /* out * beta */
-  "ld1  {v0.4s},  [%[in_y]], #16  \n" /*   load y to v0   */
-  "cbz  %w[relu], 2f              \n" /* check relu */
-  "fmax v1.4s, v1.4s, %[vzero].4s \n" /* v0 relu */
-  "2:\n"
-  "subs %w[cnt],  %w[cnt], #1     \n" /*      sub cnt     */
-  "st1  {v1.4s},  [%[out_y]], #16 \n" /*  store v1 to y   */
-  "bne  1b                        \n" /* branch to label 1*/
-  "sub  %[in_y],  %[in_y],  #16   \n" /*   restore in_y   */
-  : [cnt] "+r"(cnt4), [in_y] "+r"(y_buf_ptr), [out_y] "+r"(y)
-  : [vzero] "w"(vzero), [alpha] "w"(valpha), [beta] "w"(vbeta),
-    [relu] "r" (with_relu)
-  : "v0", "v1", "v2", "cc", "memory");
+  auto y_buf_ptr = y_buf;
+  if (cnt4 > 0) {
+    float32x4_t valpha = vdupq_n_f32(alpha);
+    float32x4_t vbeta = vdupq_n_f32(beta);
+    float32x4_t vzero = vdupq_n_f32(0.f);
+    asm volatile(
+    "ld1  {v2.4s},  [%[out_y]]      \n" /*  load y to v2    */
+    "ld1  {v0.4s},  [%[in_y]], #16  \n" /*  load y_buf to v0    */
+    "1:                             \n"
+    "movi v1.4s, #0                 \n"
+    "cbz  %w[with_bias], 2f         \n" /* check bias */
+    "ldr  q1, [%[bias]], #16        \n" /* load bias */
+    "2:                             \n"
+    "fmla v1.4s, v2.4s, %[beta].4s  \n" /* y = y * beta + bias */
+    "ldr  q2,  [%[out_y], #16]      \n" /*  load y to v2    */
+    "fmla v1.4s, v0.4s, %[alpha].4s \n" /* out * beta */
+    "ld1  {v0.4s},  [%[in_y]], #16  \n" /*   load y to v0   */
+    "cbz  %w[relu], 3f              \n" /* check relu */
+    "fmax v1.4s, v1.4s, %[vzero].4s \n" /* v0 relu */
+    "3:                             \n"
+    "subs %w[cnt],  %w[cnt], #1     \n" /*      sub cnt     */
+    "st1  {v1.4s},  [%[out_y]], #16 \n" /*  store v1 to y   */
+    "bne  1b                        \n" /* branch to label 1*/
+    "sub  %[in_y],  %[in_y],  #16   \n" /*   restore in_y   */
+    : [cnt] "+r"(cnt4), [in_y] "+r"(y_buf_ptr),
+    [out_y] "+r"(y), [bias]"+r"(bias)
+    : [vzero] "w"(vzero), [alpha] "w"(valpha), [beta] "w"(vbeta),
+    [relu] "r" (with_relu), [with_bias] "r" (with_bias)
+    : "v0", "v1", "v2", "cc", "memory");
+  }
 
   for (int r = 0; r < remain; ++r) {
-    y[r] = y_buf[r] * alpha + beta * y[r];
+    y[r] = y_buf_ptr[r] * alpha + beta * y[r];
+    if (with_bias) {
+      y[r] += bias[r];
+    }
     if (with_relu) {
       y[r] = y[r] > 0.f ? y[r] : 0.f;
     }

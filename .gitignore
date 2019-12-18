@@ -43,4 +43,5 @@ cmake/external/FeaturizersLibrary/
 # Java specific ignores
 java/src/main/native/ai_onnxruntime_*.h
 java/.gradle
+.DS_Store
 

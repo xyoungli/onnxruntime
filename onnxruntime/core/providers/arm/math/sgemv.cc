@@ -18,31 +18,31 @@
 namespace onnxruntime {
 namespace arm {
 
-void sgemv_N(int M,
-             int N,
-             float alpha,
-             const float *A,
-             int lda,
-             const float *x,
-             float beta,
-             float *y,
-             const float *bias,
-             bool with_bias,
-             bool with_relu,
-             const ARMExecutionProvider *ctx);
+void SgemvN(int M,
+            int N,
+            float alpha,
+            const float *A,
+            int lda,
+            const float *x,
+            float beta,
+            float *y,
+            const float *bias,
+            bool with_bias,
+            bool with_relu,
+            const ARMExecutionProvider *ctx);
 
-void sgemv_T(int M,
-             int N,
-             float alpha,
-             const float *A,
-             int lda,
-             const float *x,
-             float beta,
-             float *y,
-             const float *bias,
-             bool with_bias,
-             bool with_relu,
-             const ARMExecutionProvider *ctx);
+void SgemvT(int M,
+            int N,
+            float alpha,
+            const float *A,
+            int lda,
+            const float *x,
+            float beta,
+            float *y,
+            const float *bias,
+            bool with_bias,
+            bool with_relu,
+            const ARMExecutionProvider *ctx);
 
 #ifdef __aarch64__
 #else
@@ -280,7 +280,7 @@ void sgemv_trans(const int M,
 }
 #endif  // __aarch64__
 
-void sgemv(bool trans,
+void Sgemv(bool trans,
            int M,
            int N,
            float alpha,
@@ -298,28 +298,35 @@ void sgemv(bool trans,
   (void)(incx);
   (void)(incy);
   if (trans) {
-    sgemv_T(M, N, alpha, A, lda, x, beta, y, bias, with_bias, with_relu, ctx);
+    SgemvT(M, N, alpha, A, lda, x, beta, y, bias, with_bias, with_relu, ctx);
   } else {
-    sgemv_N(M, N, alpha, A, lda, x, beta, y, bias, with_bias, with_relu, ctx);
+    SgemvN(M, N, alpha, A, lda, x, beta, y, bias, with_bias, with_relu, ctx);
   }
 }
 
-void sgemv_N(int M,
-             int N,
-             float alpha,
-             const float *A,
-             int lda,
-             const float *x,
-             float beta,
-             float *y,
-             const float *bias,
-             bool with_bias,
-             bool with_relu,
-             const ARMExecutionProvider *ctx) {
+void SgemvN(int M,
+            int N,
+            float alpha,
+            const float *A,
+            int lda,
+            const float *x,
+            float beta,
+            float *y,
+            const float *bias,
+            bool with_bias,
+            bool with_relu,
+            const ARMExecutionProvider *ctx) {
   (void)(ctx);
   int cnt = N >> 3;
   int tail = N & 7;
+  uint32_t mask_buffer[8] = {0, 1, 2, 3, 4, 5, 6, 7};
+  uint32x4_t vmask1 =
+          vcltq_u32(vld1q_u32(mask_buffer), vdupq_n_u32(tail));
+  uint32x4_t vmask2 =
+          vcltq_u32(vld1q_u32(mask_buffer + 4), vdupq_n_u32(tail));
 #ifdef __aarch64__
+  float32x4_t valpha = vdupq_n_f32(alpha);
+  float32x4_t vbeta = vdupq_n_f32(beta);
   int out_cnt = M >> 3;
 #pragma omp parallel for
   for (int j = 0; j < out_cnt; j++) {
@@ -336,7 +343,6 @@ void sgemv_N(int M,
     const float *ptr_w7 = ptr_w6 + lda;
     const float *bias_ptr = bias + out_idx;
     int cnt_loop = cnt;
-    int tail_loop = tail;
     asm volatile(
     "prfm  pldl1keep, [%[in]]   \n" /* preload din */
     "prfm  pldl1keep, [%[w0]]   \n" /* preload w0 */
@@ -351,28 +357,17 @@ void sgemv_N(int M,
     "movi   v1.4s,  #0          \n" /* set out1 to 0 */
     "movi   v2.4s,  #0          \n" /* set out2 to 0 */
     "movi   v3.4s,  #0          \n" /* set out3 to 0 */
-    "movi   v4.4s,  #0          \n" /* set out4 to 0 */
-    "movi   v5.4s,  #0          \n" /* set out5 to 0 */
-    "movi   v6.4s,  #0          \n" /* set out6 to 0 */
-    "movi   v7.4s,  #0          \n" /* set out7 to 0 */
-    "cbz  %w[bias], 0f          \n" /* check bias */
-    "ldp   q8, q9, [%[bias_ptr]]\n" /* load bias to q8, q9*/
-    "ins    v0.s[0], v8.s[0]    \n" /* out0 = bias0 */
-    "ins    v1.s[0], v8.s[1]    \n" /* out1 = bias1 */
-    "ins    v2.s[0], v8.s[2]    \n" /* out2 = bias2 */
-    "ins    v3.s[0], v8.s[3]    \n" /* out3 = bias3 */
-    "ins    v4.s[0], v9.s[0]    \n" /* out4 = bias4 */
-    "ins    v5.s[0], v9.s[1]    \n" /* out5 = bias5 */
-    "ins    v6.s[0], v9.s[2]    \n" /* out6 = bias6 */
-    "ins    v7.s[0], v9.s[3]    \n" /* out7 = bias7 */
-    "0:\n"                          /* skip bias point */
-    /* check main loop */
-    "cbz %w[cnt], 2f            \n" /* check loop */
     "ldr q8, [%[in]], #16       \n" /* load input 4 float */
     "ldp q10, q11, [%[w0]], #32 \n" /* load w0 8 float */
+    "movi   v4.4s,  #0          \n" /* set out4 to 0 */
+    "movi   v5.4s,  #0          \n" /* set out5 to 0 */
     "ldp q12, q13, [%[w1]], #32 \n" /* load w1 8 float */
+    "movi   v6.4s,  #0          \n" /* set out6 to 0 */
+    "movi   v7.4s,  #0          \n" /* set out7 to 0 */
     "ldp q14, q15, [%[w2]], #32 \n" /* load w2 8 float */
     "ldp q16, q17, [%[w3]], #32 \n" /* load w3 8 float */
+    /* check main loop */
+    "cbz %w[cnt], 0f            \n" /* check loop */
     "1:                         \n" /* main loop */
     "ldp q18, q19, [%[w4]], #32 \n" /* load w4 8 float */
     "ldr q9, [%[in]], #16       \n" /* load input 4 float */
@@ -402,101 +397,86 @@ void sgemv_N(int M,
     "fmla v7.4s, v9.4s, v25.4s  \n" /* mul + add*/
     "ldp q16, q17, [%[w3]], #32 \n" /* load w3 8 float */
     "bne 1b                     \n" /* jump to main loop */
-    "sub  %[in], %[in], #16     \n" /* restore in address*/
-    "sub  %[w0], %[w0], #32     \n" /* restore w0 address*/
-    "sub  %[w1], %[w1], #32     \n" /* restore w1 address*/
-    "sub  %[w2], %[w2], #32     \n" /* restore w2 address*/
-    "sub  %[w3], %[w3], #32     \n" /* restore w3 address*/
+    "0:                         \n" /* tail */
+    "cbz %w[tail], 2f           \n"  /* check tail */
+    "movi   v31.4s,  #0         \n" /* set padding to 0 */
+    "ldp q18, q19, [%[w4]]      \n" /* load w4 8 float */
+    "bif  v8.16b, v31.16b, %[mask1].16b\n" /* pad 0 */
+    "bif  v10.16b, v31.16b, %[mask1].16b\n" /* pad 0 */
+    "bif  v12.16b, v31.16b, %[mask1].16b\n" /* pad 0 */
+    "ldp q20, q21, [%[w5]]      \n" /* load w5 8 float */
+    "ldr q9, [%[in]], #16       \n" /* load input 4 float */
+    "bif  v14.16b, v31.16b, %[mask1].16b\n" /* pad 0 */
+    "bif  v16.16b, v31.16b, %[mask1].16b\n" /* pad 0 */
+    "fmla v0.4s, v8.4s, v10.4s  \n" /* mul + add*/
+    "fmla v1.4s, v8.4s, v12.4s  \n" /* mul + add*/
+    "bif  v18.16b, v31.16b, %[mask1].16b\n" /* pad 0 */
+    "bif  v20.16b, v31.16b, %[mask1].16b\n" /* pad 0 */
+    "ldp q22, q23, [%[w6]]      \n" /* load w6 8 float */
+    "ldp q24, q25, [%[w7]]      \n" /* load w7 8 float */
+    "fmla v2.4s, v8.4s, v14.4s  \n" /* mul + add*/
+    "fmla v3.4s, v8.4s, v16.4s  \n" /* mul + add*/
+    "bif  v22.16b, v31.16b, %[mask1].16b\n" /* pad 0 */
+    "bif  v24.16b, v31.16b, %[mask1].16b\n" /* pad 0 */
+    "fmla v4.4s, v8.4s, v18.4s  \n" /* mul + add*/
+    "fmla v5.4s, v8.4s, v20.4s  \n" /* mul + add*/
+    "bif  v9.16b, v31.16b, %[mask2].16b\n" /* pad 0 */
+    "bif  v11.16b, v31.16b, %[mask2].16b\n" /* pad 0 */
+    "bif  v13.16b, v31.16b, %[mask2].16b\n" /* pad 0 */
+    "fmla v6.4s, v8.4s, v22.4s  \n" /* mul + add*/
+    "fmla v7.4s, v8.4s, v24.4s  \n" /* mul + add*/
+    "bif  v15.16b, v31.16b, %[mask2].16b\n" /* pad 0 */
+    "bif  v17.16b, v31.16b, %[mask2].16b\n" /* pad 0 */
+    "fmla v0.4s, v9.4s, v11.4s  \n" /* mul + add*/
+    "fmla v1.4s, v9.4s, v13.4s  \n" /* mul + add*/
+    "bif  v19.16b, v31.16b, %[mask2].16b\n" /* pad 0 */
+    "bif  v21.16b, v31.16b, %[mask2].16b\n" /* pad 0 */
+    "fmla v2.4s, v9.4s, v15.4s  \n" /* mul + add*/
+    "fmla v3.4s, v9.4s, v17.4s  \n" /* mul + add*/
+    "bif  v23.16b, v31.16b, %[mask2].16b\n" /* pad 0 */
+    "bif  v25.16b, v31.16b, %[mask2].16b\n" /* pad 0 */
+    "fmla v4.4s, v9.4s, v19.4s  \n" /* mul + add*/
+    "fmla v5.4s, v9.4s, v21.4s  \n" /* mul + add*/
+    "fmla v6.4s, v9.4s, v23.4s  \n" /* mul + add*/
+    "fmla v7.4s, v9.4s, v25.4s  \n" /* mul + add*/
     /* pair add to final result */
     "2:                         \n"  /* reduce to scale */
-    "faddp  v16.4s, v0.4s, v0.4s\n"  /* pair add to vector */
-    "faddp  v17.4s, v1.4s, v1.4s\n"  /* pair add to vector */
-    "faddp  v18.4s, v2.4s, v2.4s\n"  /* pair add to vector */
-    "faddp  v19.4s, v3.4s, v3.4s\n"  /* pair add to vector */
-    "faddp  v20.4s, v4.4s, v4.4s\n"  /* pair add to vector */
-    "faddp  v21.4s, v5.4s, v5.4s\n"  /* pair add to vector */
-    "faddp  v22.4s, v6.4s, v6.4s\n"  /* pair add to vector */
-    "faddp  v23.4s, v7.4s, v7.4s\n"  /* pair add to vector */
-    "faddp  s8, v16.2s          \n"  /* pair add to scale */
-    "faddp  s9, v17.2s          \n"  /* pair add to scale */
-    "faddp  s10, v18.2s         \n"  /* pair add to scale */
-    "faddp  s11, v19.2s         \n"  /* pair add to scale */
-    "faddp  s12, v20.2s         \n"  /* pair add to scale */
-    "faddp  s13, v21.2s         \n"  /* pair add to scale */
-    "faddp  s14, v22.2s         \n"  /* pair add to scale */
-    "faddp  s15, v23.2s         \n"  /* pair add to scale */
-    "cbz %w[tail], 4f           \n"  /* check tail */
-    "3:                         \n"  /* tail loop */
-    "ldr     s16, [%[in]], #4   \n"  /* load in, 1 float */
-    "ldr     s17, [%[w0]], #4   \n"  /* load w0, 1 float */
-    "ldr     s18, [%[w1]], #4   \n"  /* load w1, 1 float */
-    "ldr     s19, [%[w2]], #4   \n"  /* load w2, 1 float */
-    "ldr     s20, [%[w3]], #4   \n"  /* load w3, 1 float */
-    "ldr     s21, [%[w4]], #4   \n"  /* load w4, 1 float */
-    "ldr     s22, [%[w5]], #4   \n"  /* load w5, 1 float */
-    "ldr     s23, [%[w6]], #4   \n"  /* load w6, 1 float */
-    "ldr     s24, [%[w7]], #4   \n"  /* load w7, 1 float */
-    "fmadd   s8, s16, s17, s8   \n"  /* mul + add */
-    "fmadd   s9, s16, s18, s9   \n"  /* mul + add */
-    "fmadd   s10, s16, s19, s10 \n"  /* mul + add */
-    "fmadd   s11, s16, s20, s11 \n"  /* mul + add */
-    "fmadd   s12, s16, s21, s12 \n"  /* mul + add */
-    "fmadd   s13, s16, s22, s13 \n"  /* mul + add */
-    "fmadd   s14, s16, s23, s14 \n"  /* mul + add */
-    "fmadd   s15, s16, s24, s15 \n"  /* mul + add */
-    "subs %w[tail], %w[tail], #1\n"  /* sub tail loop count */
-    "bne 3b                     \n"  /* jump to tail loop */
+    "faddp  v16.4s, v0.4s, v1.4s\n"  /* pair add to vector */
+    "faddp  v17.4s, v2.4s, v3.4s\n"  /* pair add to vector */
+    "faddp  v18.4s, v4.4s, v5.4s\n"  /* pair add to vector */
+    "faddp  v19.4s, v6.4s, v7.4s\n"  /* pair add to vector */
+    "faddp  v8.4s,v16.4s,v17.4s \n"  /* pair add to vector */
+    "faddp  v9.4s,v18.4s,v19.4s \n"  /* pair add to vector */
     /* deal with alpha and beta */
-    "4:                         \n"  /* deal with alpha and beta */
-    "fmov s0, %w[alpha]\n"
-    "fmov s1, %w[beta]\n"
-    "ldp     s16, s17, [%[out]] \n"  /* load out, 2 float */
-    "ldp  s18, s19, [%[out], #8]\n"  /* load out, 2 float */
-    "ldp s20, s21, [%[out], #16]\n"  /* load out, 2 float */
-    "ldp s22, s23, [%[out], #24]\n"  /* load out, 2 float */
-    "fmul   s16, s16, s1        \n"  /* mul beta */
-    "fmul   s17, s17, s1        \n"  /* mul beta */
-    "fmul   s18, s18, s1        \n"  /* mul beta */
-    "fmul   s19, s19, s1        \n"  /* mul beta */
-    "fmul   s20, s20, s1        \n"  /* mul beta */
-    "fmul   s21, s21, s1        \n"  /* mul beta */
-    "fmul   s22, s22, s1        \n"  /* mul beta */
-    "fmul   s23, s23, s1        \n"  /* mul beta */
-    "fmadd s8, s8, s0, s16      \n"  /* mul + add */
-    "fmadd s9, s9, s0, s17      \n"  /* mul + add */
-    "fmadd s10,s10,s0, s18      \n"  /* mul + add */
-    "fmadd s11,s11,s0, s19      \n"  /* mul + add */
-    "fmadd s12,s12,s0, s20      \n"  /* mul + add */
-    "fmadd s13,s13,s0, s21      \n"  /* mul + add */
-    "fmadd s14,s14,s0, s22      \n"  /* mul + add */
-    "fmadd s15,s15,s0, s23      \n"  /* mul + add */
-    "cbz    %w[relu], 5f        \n" /* check relu */
-    "movi   d0, #0              \n" /* zero data for relu */
-    "fmax   s8, s8, s0          \n" /* relu */
-    "fmax   s9, s9, s0          \n" /* relu */
-    "fmax   s10, s10, s0        \n" /* relu */
-    "fmax   s11, s11, s0        \n" /* relu */
-    "fmax   s12, s12, s0        \n" /* relu */
-    "fmax   s13, s13, s0        \n" /* relu */
-    "fmax   s14, s14, s0        \n" /* relu */
-    "fmax   s15, s15, s0        \n" /* relu */
-    "5:                         \n" /* save result */
-    "stp s8, s9, [%[out]]       \n"
-    "stp s10, s11, [%[out], #8] \n"
-    "stp s12, s13, [%[out], #16]\n"
-    "stp s14, s15, [%[out], #24]\n"
+    "ldp q0, q1, [%[out]]       \n"  /* load out to q0, q1 */
+    "movi v2.4s, #0             \n"
+    "movi v3.4s, #0             \n"
+    "cbz  %w[bias], 3f          \n" /* check bias */
+    "ldp   q2, q3, [%[bias_ptr]]\n" /* load bias to q2, q3*/
+    "3:                         \n"
+    "fmla   v2.4s, v0.4s, %[beta].4s\n" /* y = c * beta + bias */
+    "fmla   v3.4s, v1.4s, %[beta].4s\n" /* y = c * beta + bias */
+    "fmla   v2.4s, v8.4s, %[alpha].4s\n" /* y = y + alpha * Ax */
+    "fmla   v3.4s, v9.4s, %[alpha].4s\n" /* y = y + alpha * Ax */
+    "cbz    %w[relu], 4f        \n" /* check relu */
+    "movi   v31.4s,  #0         \n" /* set padding to 0 */
+    "fmax   v2.4s, v2.4s, v31.4s\n" /* relu */
+    "fmax   v3.4s, v3.4s, v31.4s\n" /* relu */
+    "4:                         \n" /* save result */
+    "stp q2, q3, [%[out]]\n"
     : [in] "+r"(ptr_in), [w0] "+r"(ptr_w0),
     [w1] "+r"(ptr_w1), [w2] "+r"(ptr_w2),
     [w3] "+r"(ptr_w3), [w4] "+r"(ptr_w4),
-    [w5] "+r"(ptr_w5), [w6] "+r"(ptr_w6), [w7] "+r"(ptr_w7),
-    [cnt] "+r"(cnt_loop), [tail] "+r"(tail_loop)
+    [w5] "+r"(ptr_w5), [w6] "+r"(ptr_w6),
+    [w7] "+r"(ptr_w7), [cnt] "+r"(cnt_loop)
     : [out] "r"(ptr_out), [bias_ptr] "r"(bias_ptr),
-      [bias] "r"(with_bias), [relu] "r"(with_relu),
-      [alpha] "r"(alpha), [beta] "r"(beta)
+      [bias] "r"(with_bias), [relu] "r"(with_relu), [tail] "r"(tail),
+      [alpha] "w"(valpha), [beta] "w"(vbeta),
+      [mask1]"w"(vmask1), [mask2]"w"(vmask2)
     : "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9",
       "v10", "v11", "v12", "v13", "v14", "v15",
       "v16", "v17", "v18", "v19", "v20", "v21",
-      "v22", "v23", "v24", "v25", "cc", "memory");
+      "v22", "v23", "v24", "v25", "v31", "cc", "memory");
   }
 //! deal with remains
 #pragma omp parallel for
@@ -505,55 +485,59 @@ void sgemv_N(int M,
     const float *ptr_in = x;
     const float *ptr_w0 = A + (lda * j);
     int cnt_loop = cnt;
-    int tail_loop = tail;
     float bias0 = bias[j];
     asm volatile(
     "prfm  pldl1keep, [%[in]]   \n" /* preload din */
     "prfm  pldl1keep, [%[w0]]   \n" /* preload w0 */
-    "movi   v0.4s,  #0          \n" /* set out0 to 0 */
-    "movi   v1.4s,  #0          \n" /* set out0 to 0 */
-    "cbz  %w[bias], 0f          \n" /* check bias */
-    "fmov   s0,  %w[bias0]      \n" /* set out0 = bias0 */
-    "0:                         \n"
-    /* check main loop */
-    "cbz %w[cnt], 2f            \n" /* check loop */
-    "1:                         \n" /* main loop */
     "ldp q8, q9, [%[in]], #32   \n" /* load input 8 float */
     "ldp q10, q11, [%[w0]], #32 \n" /* load w0 8 float */
+    "movi   v0.4s,  #0          \n" /* set out0 to 0 */
+    "movi   v1.4s,  #0          \n" /* set out0 to 0 */
+    /* check main loop */
+    "cbz %w[cnt], 0f            \n" /* check loop */
+    "1:                         \n" /* main loop */
     "fmla v0.4s, v8.4s, v10.4s  \n" /* mul + add*/
-    "subs %w[cnt], %w[cnt], #1  \n" /* sub main loop count */
     "fmla v1.4s, v9.4s, v11.4s  \n" /* mul + add*/
+    "subs %w[cnt], %w[cnt], #1  \n" /* sub main loop count */
+    "ldp q8, q9, [%[in]], #32   \n" /* load input 8 float */
+    "ldp q10, q11, [%[w0]], #32 \n" /* load w0 8 float */
     "bne 1b                     \n" /* jump to main loop */
+    "0:                         \n" /* tail */
+    "cbz %w[tail], 2f           \n" /* check tail */
+    "movi   v31.4s,  #0         \n" /* set padding to 0 */
+    "bif  v8.16b, v31.16b, %[mask1].16b\n" /* pad 0 */
+    "bif  v10.16b, v31.16b, %[mask1].16b\n" /* pad 0 */
+    "bif  v9.16b, v31.16b, %[mask2].16b\n" /* pad 0 */
+    "bif  v11.16b, v31.16b, %[mask2].16b\n" /* pad 0 */
+    "fmla v0.4s, v8.4s, v10.4s  \n" /* mul + add*/
+    "fmla v1.4s, v9.4s, v11.4s  \n" /* mul + add*/
     /* pair add to final result */
     "2:                         \n" /* reduce to scale */
-    "fadd   v9.4s, v0.4s, v1.4s \n" /* add 2 vector */
-    "faddp  v10.4s, v9.4s, v9.4s\n" /* pair add to vector */
-    "faddp  s8, v10.2s          \n" /* pair add to scale */ /* check tails */
-    "cbz %w[tail], 4f           \n" /* check tail */
-    "3:                         \n" /* tail loop */
-    "ldr     s16, [%[in]], #4   \n" /* load in, 1 float */
-    "ldr     s17, [%[w0]], #4   \n" /* load w0, 1 float */
-    "fmadd   s8, s16, s17, s8   \n" /* mul + add */
-    "subs %w[tail], %w[tail], #1\n" /* sub tail loop count */
-    "bne 3b                     \n" /* jump to tail loop */
+    "faddp  v2.4s, v0.4s, v1.4s \n" /* pair add to vector */
+    "faddp  v3.4s, v2.4s, v2.4s \n" /* pair add to vector */
+    "faddp  s0, v3.2s           \n" /* pair add to scale */
     /* end */
-    "4:                         \n" /* deal with alpha and beta */
-    "fmov s0, %w[alpha]         \n"
-    "fmov s1, %w[beta]          \n"
-    "ldr    s16, [%[out]]       \n" /* load out, 1 float */
-    "fmul   s16, s16, s1        \n" /* y * beta */
-    "fmadd s8, s8, s0, s16      \n" /* y = alpha * A * x + beta * y */
-    "cbz  %w[relu], 5f          \n" /* check relu */
-    "movi   d0, #0              \n" /* zero data for relu */
-    "fmax   s8, s8, s0          \n" /* relu */
-    "5:                         \n" /* end */
-    "str s8, [%[out]]           \n" /* save result */
+    "fmov s1, %w[alpha]         \n"
+    "fmov s2, %w[beta]          \n"
+    "ldr    s3, [%[out]]        \n" /* load out, 1 float */
+    "movi   d4, #0              \n"
+    "cbz  %w[bias], 3f          \n" /* check bias */
+    "fmov   s4,  %w[bias0]      \n" /* set out0 = bias0 */
+    "3:                         \n"
+    "fmadd s5, s2, s3, s4       \n" /* y = c * beta + bias */
+    "fmadd s6, s0, s1, s5       \n" /* y = alpha * Ax + y */
+    "cbz  %w[relu], 4f          \n" /* check relu */
+    "movi   d4, #0              \n" /* zero data for relu */
+    "fmax   s6, s6, s4          \n" /* relu */
+    "4:                         \n" /* end */
+    "str s6, [%[out]]           \n" /* save result */
     : [in] "+r"(ptr_in), [w0] "+r"(ptr_w0),
-    [cnt] "+r"(cnt_loop), [tail] "+r"(tail_loop)
+    [cnt] "+r"(cnt_loop)
     : [out] "r"(ptr_out), [bias0] "r"(bias0),
     [bias] "r"(with_bias), [relu] "r"(with_relu),
-    [alpha] "r"(alpha), [beta] "r"(beta)
-    : "v0", "v1", "v8", "v9", "v10", "v11", "v16", "v17", "cc", "memory");
+    [alpha] "r"(alpha), [beta] "r"(beta), [tail] "r"(tail),
+    [mask1]"w"(vmask1), [mask2]"w"(vmask2)
+    : "v0", "v1", "v8", "v9", "v10", "v11", "v16", "v17", "v31", "cc", "memory");
   }
 #else  // __aarch64__
   int out_cnt = M >> 2;
@@ -623,18 +607,18 @@ void sgemv_N(int M,
 #endif  // __aarch64__
 }
 
-void sgemv_T(int M,
-             int N,
-             float alpha,
-             const float *A,
-             int lda,
-             const float *x,
-             float beta,
-             float *y,
-             const float *bias,
-             bool with_bias,
-             bool with_relu,
-             const ARMExecutionProvider *ctx) {
+void SgemvT(int M,
+            int N,
+            float alpha,
+            const float *A,
+            int lda,
+            const float *x,
+            float beta,
+            float *y,
+            const float *bias,
+            bool with_bias,
+            bool with_relu,
+            const ARMExecutionProvider *ctx) {
   int m_cnt16 = M >> 4;
   int m_cnt8 = (M & 15) >> 3;
   int m_cnt4 = (M & 7) >> 2;

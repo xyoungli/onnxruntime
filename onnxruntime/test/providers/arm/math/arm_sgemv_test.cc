@@ -59,13 +59,13 @@ bool test_sgemv(bool tra, int m, int n, float alpha, int lda, float beta,
   double ops = 2.0 * m * n;
   /// warmup
   for (int j = 0; j < warmup_iter; ++j) {
-    arm::sgemv(tra, m, n, alpha, da, lda, dx, 1, beta, dy, 1, dbias, has_bias, has_relu, provider.get());
+    arm::Sgemv(tra, m, n, alpha, da, lda, dx, 1, beta, dy, 1, dbias, has_bias, has_relu, provider.get());
   }
 
   t0.Reset();
   for (int i = 0; i < repeats; ++i) {
     t0.Start();
-    arm::sgemv(tra, m, n, alpha, da, lda, dx, 1, beta, dy, 1, dbias, has_bias, has_relu, provider.get());
+    arm::Sgemv(tra, m, n, alpha, da, lda, dx, 1, beta, dy, 1, dbias, has_bias, has_relu, provider.get());
     t0.Stop();
   }
   std::cout << "sgemv, transA: " << (tra ? "true" : "false")
@@ -110,29 +110,31 @@ TEST(TestARMSgemv, Sgemv) {
       for (auto &n : {1, 3, 8, 17, 59, 234}) {
         for (auto &tra : {false}) {//true,
           for (auto& lda_inc : {0, 10}) {
-            for (auto &has_bias : {false, true}) {
-              for (auto &has_relu : {false, true}) {
-                for (auto &th : {1, 2, 4}) {
-                  float alpha = 1.f;
-                  float beta = 0.f;
-                  int lda = tra ? m : n;
-                  lda += lda_inc;
-                  auto flag = test_sgemv(tra, m, n, alpha, lda, beta,
-                                         has_bias, has_relu, 0, th);
-                  if (flag) {
-                    std::cout << "test m = " << m << ", k=" << n
-                              << ", bias: " << (has_bias ? "true" : "false")
-                              << ", relu: " << (has_relu ? "true" : "false")
-                              << ", trans A: " << (tra ? "true" : "false")
-                              << ", threads: " << th << " passed\n";
-                  } else {
-                    std::cout << "test m = " << m << ", k=" << n
-                              << ", bias: " << (has_bias ? "true" : "false")
-                              << ", relu: " << (has_relu ? "true" : "false")
-                              << ", trans A: " << (tra ? "true" : "false")
-                              << ", threads: " << th << " failed\n";
-                    EXPECT_TRUE(false);
-                    return;
+            for (auto& alpha : {1.f, 0.5f}) {
+              for (auto &beta : {0.f, 0.5f}) {
+                for (auto &has_bias : {false, true}) {
+                  for (auto &has_relu : {false, true}) {
+                    for (auto &th : {1, 2, 4}) {
+                      int lda = tra ? m : n;
+                      lda += lda_inc;
+                      auto flag = test_sgemv(tra, m, n, alpha, lda, beta,
+                                             has_bias, has_relu, 0, th);
+                      if (flag) {
+                        std::cout << "test m = " << m << ", n=" << n
+                                  << ", bias: " << (has_bias ? "true" : "false")
+                                  << ", relu: " << (has_relu ? "true" : "false")
+                                  << ", trans A: " << (tra ? "true" : "false")
+                                  << ", threads: " << th << " passed\n";
+                      } else {
+                        std::cout << "test m = " << m << ", n=" << n
+                                  << ", bias: " << (has_bias ? "true" : "false")
+                                  << ", relu: " << (has_relu ? "true" : "false")
+                                  << ", trans A: " << (tra ? "true" : "false")
+                                  << ", threads: " << th << " failed\n";
+                        EXPECT_TRUE(false);
+                        return;
+                      }
+                    }
                   }
                 }
               }

@@ -20,7 +20,12 @@
 namespace onnxruntime {
 namespace arm {
 
-void sgemv(bool trans,
+/*
+ * Sgemv: support bias and relu, incx and incy are not supported, they are set to 1 in program.
+ * y = ReLU(alpha * A * x + beta * y + bias)
+ * relu and bias can be set to false
+ */
+void Sgemv(bool trans,
            int M,
            int N,
            float alpha,

@@ -16,7 +16,7 @@
 #include "test/data_utils.h"
 #include "test/naive_math_impl.h"
 #include "test/timer.h"
-#include "core/providers/arm/math/sgemv.h"
+#include "core/providers/arm/funcs/sgemv.h"
 
 const bool precision_test = true;
 const bool performance_test = true;

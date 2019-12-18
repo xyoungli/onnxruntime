@@ -16,8 +16,8 @@
 #include "test/data_utils.h"
 #include "test/naive_math_impl.h"
 #include "test/timer.h"
-#include "core/providers/arm/math/sgemm.h"
-#include "core/providers//arm/math/sgemm_packed.h"
+#include "core/providers/arm/funcs/sgemm.h"
+#include "core/providers/arm/funcs/sgemm_packed.h"
 
 const bool precision_test_basic = true;
 const bool precision_test_full = false;

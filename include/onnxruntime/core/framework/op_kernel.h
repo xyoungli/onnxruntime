@@ -258,6 +258,11 @@ KernelCreateInfo BuildKernelCreateInfo();
 }  // namespace cuda
 }  // namespace contrib
 
+namespace arm {
+template <typename T>
+KernelCreateInfo BuildKernelCreateInfo();
+}  // namespace arm
+
 using BuildKernelCreateInfoFn = KernelCreateInfo (*)();
 
 // Naming convention for operator kernel classes

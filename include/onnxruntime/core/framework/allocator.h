@@ -136,6 +136,7 @@ std::ostream& operator<<(std::ostream& out, const OrtMemoryInfo& info);
 
 namespace onnxruntime {
 constexpr const char* CPU = "Cpu";
+constexpr const char* ARM = "Arm";
 constexpr const char* CUDA = "Cuda";
 constexpr const char* CUDA_PINNED = "CudaPinned";
 constexpr const char* TRT = "Tensorrt";

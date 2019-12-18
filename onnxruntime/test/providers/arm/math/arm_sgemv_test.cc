@@ -14,7 +14,7 @@
 
 #include <gtest/gtest.h>
 #include "test/data_utils.h"
-#include "naive_math_impl.h"
+#include "test/naive_math_impl.h"
 #include "test/timer.h"
 #include "core/providers/arm/math/sgemv.h"
 

@@ -10,7 +10,7 @@ TEST(ARMExecutionProviderTest, MetadataTest) {
   ARMExecutionProviderInfo info;
   auto provider = onnxruntime::make_unique<ARMExecutionProvider>(info);
   EXPECT_TRUE(provider != nullptr);
-  ASSERT_STREQ(provider->GetAllocator(0, OrtMemTypeDefault)->Info().name, CPU);
+  ASSERT_STREQ(provider->GetAllocator(0, OrtMemTypeDefault)->Info().name, ARM);
 }
 }  // namespace test
 }  // namespace onnxruntime

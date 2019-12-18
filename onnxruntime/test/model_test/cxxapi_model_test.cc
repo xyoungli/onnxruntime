@@ -27,8 +27,8 @@ void test_model(const char* model_path, int batch_size, int warmup_iter, int rep
   // OrtSessionOptionsAppendExecutionProvider_CUDA(session_options, 1);
 
 #ifdef USE_ARM
-//  auto state = OrtSessionOptionsAppendExecutionProvider_ARM(session_options,
-//          1, ARM_POWER_NO_BIND, 1);
+  auto state = OrtSessionOptionsAppendExecutionProvider_ARM(session_options,
+          1, static_cast<PowerMode>(power_mode), threads);
 #endif
 
   // Sets graph optimization level

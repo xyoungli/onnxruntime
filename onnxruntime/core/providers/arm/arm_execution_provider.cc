@@ -38,7 +38,7 @@ ARMExecutionProvider::ARMExecutionProvider(const ARMExecutionProviderInfo& info)
   arm::ARMDevice::Global().Init();
 
   auto default_allocator_factory = [](int) {
-    auto memory_info = onnxruntime::make_unique<OrtMemoryInfo>(CPU, OrtAllocatorType::OrtDeviceAllocator);
+    auto memory_info = onnxruntime::make_unique<OrtMemoryInfo>(ARM, OrtAllocatorType::OrtDeviceAllocator);
     return onnxruntime::make_unique<CPUAllocator>(std::move(memory_info));
   };
 
@@ -51,7 +51,7 @@ ARMExecutionProvider::ARMExecutionProvider(const ARMExecutionProviderInfo& info)
 
   auto cpu_allocator_factory = [](int) {
     auto memory_info = onnxruntime::make_unique<OrtMemoryInfo>(
-            CPU, OrtAllocatorType::OrtDeviceAllocator, OrtDevice(), 0, OrtMemTypeCPUOutput);
+            ARM, OrtAllocatorType::OrtDeviceAllocator, OrtDevice(), 0, OrtMemTypeCPUOutput);
     return onnxruntime::make_unique<CPUAllocator>(std::move(memory_info));
   };
 
@@ -68,7 +68,9 @@ std::unique_ptr<IDataTransfer> ARMExecutionProvider::GetDataTransfer() const {
   return onnxruntime::make_unique<CPUDataTransfer>();
 }
 
-ARMExecutionProvider::~ARMExecutionProvider() {}
+ARMExecutionProvider::~ARMExecutionProvider() {
+  ClearWorkspace();
+}
 
 std::shared_ptr<KernelRegistry> ARMExecutionProvider::GetKernelRegistry() const {
   static std::shared_ptr<KernelRegistry> kernel_registry = onnxruntime::arm::GetArmKernelRegistry();

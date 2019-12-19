@@ -295,12 +295,42 @@ void Sgemv(bool trans,
            bool with_bias,
            bool with_relu,
            const ARMExecutionProvider* ctx) {
-  (void)(incx);
-  (void)(incy);
+  auto alloc_ptr = ctx->GetAllocator(0, OrtMemTypeDefault);
+  auto x_ptr = x;
+  auto y_ptr = y;
+  float* x_tmp = nullptr;
+  float* y_tmp = nullptr;
+  if (incx > 1) {
+    x_tmp = static_cast<float*>(
+            alloc_ptr->Alloc(N * sizeof(float)));
+    for (int i = 0; i < N; ++i) {
+      x_tmp[i] = x[i * incx];
+    }
+    x_ptr = x_tmp;
+  }
+  if (incy > 1) {
+    y_tmp = static_cast<float*>(
+            alloc_ptr->Alloc(M * sizeof(float)));
+    for (int i = 0; i < M; ++i) {
+      y_tmp[i] = y[i * incy];
+    }
+    y_ptr = y_tmp;
+  }
   if (trans) {
-    SgemvT(M, N, alpha, A, lda, x, beta, y, bias, with_bias, with_relu, ctx);
+    SgemvT(M, N, alpha, A, lda, x_ptr, beta, y_ptr, bias, with_bias, with_relu, ctx);
   } else {
-    SgemvN(M, N, alpha, A, lda, x, beta, y, bias, with_bias, with_relu, ctx);
+    SgemvN(M, N, alpha, A, lda, x_ptr, beta, y_ptr, bias, with_bias, with_relu, ctx);
+  }
+  if (incy > 1) {
+    for (int i = 0; i < M; ++i) {
+      y[i * incy] = y_ptr[i];
+    }
+  }
+  if (x_tmp) {
+    alloc_ptr->Free(x_tmp);
+  }
+  if (y_tmp) {
+    alloc_ptr->Free(y_tmp);
   }
 }
 

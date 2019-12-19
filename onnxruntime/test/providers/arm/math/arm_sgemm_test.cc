@@ -1,17 +1,3 @@
-// Copyright (c) 2019 PaddlePaddle Authors. All Rights Reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 #include <gtest/gtest.h>
 #include "test/data_utils.h"
 #include "test/naive_math_impl.h"
@@ -49,6 +35,7 @@ bool TestSgemm(bool tra, bool trb,
   auto db = static_cast<float *>(alloc->Alloc(size_b * sizeof(float)));
   auto dbias = static_cast<float *>(alloc->Alloc(m * sizeof(float)));
   auto dc = static_cast<float *>(alloc->Alloc(size_c * sizeof(float)));
+  auto dc_prepack = static_cast<float *>(alloc->Alloc(size_c * sizeof(float)));
   auto dc_basic = static_cast<float *>(alloc->Alloc(size_c * sizeof(float)));
   auto dc_backup = static_cast<float *>(alloc->Alloc(size_c * sizeof(float)));
 
@@ -57,6 +44,7 @@ bool TestSgemm(bool tra, bool trb,
   fill_data_rand(dbias, -1.f, 1.f, m);
   fill_data_rand(dc, -1.f, 1.f, size_c);
 
+  memcpy(dc_prepack, dc, sizeof(float) * size_c);
   memcpy(dc_basic, dc, sizeof(float) * size_c);
   memcpy(dc_backup, dc, sizeof(float) * size_c);
 
@@ -90,18 +78,34 @@ bool TestSgemm(bool tra, bool trb,
 
   for (int i = 0; i < repeats; ++i) {
     if (i == repeats - 1) {
-      memcpy(dc, dc_backup, sizeof(float) * m * ldc);
+      memcpy(dc_prepack, dc_backup, sizeof(float) * m * ldc);
     }
     t0.Start();
     arm::SgemmPrepack(trb,
                       m, n, k,
                       packed_A_ptr,
                       db, ldb,
-                      beta, dc, ldc,
+                      beta, dc_prepack, ldc,
                       dbias, with_bias, with_relu, provider.get());
     t0.Stop();
   }
-  std::cout << "SgemmPrepack , transA: " << (tra ? "true" : "false")
+
+  Timer t1;
+  for (int i = 0; i < repeats; ++i) {
+    if (i == repeats - 1) {
+      memcpy(dc, dc_backup, sizeof(float) * m * ldc);
+    }
+    t1.Start();
+    arm::Sgemm(tra, trb,
+               m, n, k,
+               alpha, da, lda,
+               db, ldb,
+               beta, dc, ldc,
+               dbias, with_bias, with_relu, provider.get());
+    t1.Stop();
+  }
+
+  std::cout << "Sgemm , transA: " << (tra ? "true" : "false")
             << ", transB: " << (trb ? "true" : "false")
             << ", M: " << m << ", N: " << n << ", K: " << k
             << ", alpha: " << alpha <<  ", beta: " << beta
@@ -109,31 +113,60 @@ bool TestSgemm(bool tra, bool trb,
             << ", bias: " << (with_bias ? "true" : "false")
             << ", relu: " << (with_relu ? "true" : "false")
             << ", power_mode: " << cls << ", threads: " << ths
-            << ", GOPS: " << ops * 1e-9f << "GOPS"
-            << ", avg time: " << t0.LapTimes().Avg() << "ms"
+            << ", GOPS: " << ops * 1e-9f << "GOPS\n"
+            << "SgemmPrepack avg time: " << t0.LapTimes().Avg() << "ms"
             << ", min time: " << t0.LapTimes().Min() << "ms"
             << ", mean GOPs: " << ops * 1e-6f / t0.LapTimes().Avg() << "GOPs"
-            << ", max GOPs: " << ops * 1e-6f / t0.LapTimes().Min() << " GOPs\n";
+            << ", max GOPs: " << ops * 1e-6f / t0.LapTimes().Min() << " GOPs\n"
+            << "Sgemm avg time: " << t1.LapTimes().Avg() << "ms"
+            << ", min time: " << t1.LapTimes().Min() << "ms"
+            << ", mean GOPs: " << ops * 1e-6f / t1.LapTimes().Avg() << "GOPs"
+            << ", max GOPs: " << ops * 1e-6f / t1.LapTimes().Min() << " GOPs\n";
 
+  bool passed = true;
   if (check_result) {
+    double max_ratio_prepack = 0;
+    double max_diff_prepack = 0;
     double max_ratio = 0;
     double max_diff = 0;
+    check_precision(dc_basic, dc_prepack, max_ratio_prepack, max_diff_prepack, size_c);
     check_precision(dc_basic, dc, max_ratio, max_diff, size_c);
-    std::cout << "compare result, max diff: " << max_diff
-              << ", max ratio: " << max_ratio << std::endl;
+    std::cout << "compare result:\n"
+              << "prepack sgemm: max diff: " << max_diff_prepack << ", max ratio: " << max_ratio_prepack << "\n"
+              << "sgemm: max_diff: " << max_diff << ", max_ratio: " << max_ratio << std::endl;
+    if (std::abs(max_ratio_prepack) > 1e-4f && std::abs(max_diff_prepack) > 5e-5f) {
+      auto data_diff = static_cast<float *>(alloc->Alloc(size_c * sizeof(float)));
+      compute_data_diff(dc_basic, dc_prepack, data_diff, size_c);
+      std::cout << "basic result: \n";
+      print_data(dc_basic, size_c, ldc);
+      std::cout << "saber result: \n";
+      print_data(dc_prepack, size_c, ldc);
+      std::cout << "diff result: \n";
+      print_data(data_diff, size_c, ldc);
+      alloc_ptr->Free(data_diff);
+      passed = false;
+    }
     if (std::abs(max_ratio) > 1e-4f && std::abs(max_diff) > 5e-5f) {
       auto data_diff = static_cast<float *>(alloc->Alloc(size_c * sizeof(float)));
-      compute_data_diff(dc_basic, dc, data_diff, m);
+      compute_data_diff(dc_basic, dc, data_diff, size_c);
       std::cout << "basic result: \n";
       print_data(dc_basic, size_c, ldc);
       std::cout << "saber result: \n";
       print_data(dc, size_c, ldc);
       std::cout << "diff result: \n";
       print_data(data_diff, size_c, ldc);
-      return false;
+      alloc_ptr->Free(data_diff);
+      passed = false;
     }
   }
-  return true;
+  alloc_ptr->Free(da);
+  alloc_ptr->Free(db);
+  alloc_ptr->Free(dbias);
+  alloc_ptr->Free(dc);
+  alloc_ptr->Free(dc_prepack);
+  alloc_ptr->Free(dc_basic);
+  alloc_ptr->Free(dc_backup);
+  return passed;
 }
 
 TEST(TestSgemm, TestSgemmPrecisionFull) {
@@ -260,7 +293,7 @@ TEST(TestSgemm, TestSgemmPrecision) {
   }
 }
 
-TEST(TestSgemm, TestSgemmPerformance) {
+TEST(TestSgemm, TestSgemmPerformanceCubic) {
   const int m = 512;
   const int n = 512;
   const int k = 512;
@@ -273,6 +306,42 @@ TEST(TestSgemm, TestSgemmPerformance) {
         TestSgemm(tra, trb, m, n, k,
                 1.f, lda, ldb, 0.f, ldc,
                 false, false, 0, th, 10, 50, false);
+      }
+    }
+  }
+}
+
+TEST(TestSgemm, TestSgemmPerformanceNarrow) {
+  const int m = 1;
+  const int n = 512;
+  const int k = 512;
+  for (auto& tra : {false, true}) {
+    for (auto& trb: {false, true}) {
+      for (auto& th : {1, 2, 4}) {
+        int lda = tra? m : k;
+        int ldb = trb? k : n;
+        int ldc = n;
+        TestSgemm(tra, trb, m, n, k,
+                  1.f, lda, ldb, 0.f, ldc,
+                  false, false, 0, th, 10, 50, false);
+      }
+    }
+  }
+}
+
+TEST(TestSgemm, TestSgemmPerformanceWide) {
+  const int m = 512;
+  const int n = 1;
+  const int k = 512;
+  for (auto& tra : {false, true}) {
+    for (auto& trb: {false, true}) {
+      for (auto& th : {1, 2, 4}) {
+        int lda = tra? m : k;
+        int ldb = trb? k : n;
+        int ldc = n;
+        TestSgemm(tra, trb, m, n, k,
+                  1.f, lda, ldb, 0.f, ldc,
+                  false, false, 0, th, 10, 50, false);
       }
     }
   }

@@ -566,7 +566,8 @@ void OpTester::Run(SessionOptions so,  // Take the SessionOptions by value (i.e.
         kTensorrtExecutionProvider,
         kOpenVINOExecutionProvider,
         kDmlExecutionProvider,
-        kAclExecutionProvider,};
+        kAclExecutionProvider,
+        kArmExecutionProvider,};
 
     bool has_run = false;
 

@@ -32,7 +32,7 @@ std::shared_ptr<KernelRegistry> GetArmKernelRegistry() {
 }  // namespace arm
 
 ARMExecutionProvider::ARMExecutionProvider(const ARMExecutionProviderInfo& info)
-        : IExecutionProvider{onnxruntime::kAclExecutionProvider} {
+        : IExecutionProvider{onnxruntime::kArmExecutionProvider} {
   mode_ = info.mode;
   threads_ = info.threads;
   arm::ARMDevice::Global().Init();

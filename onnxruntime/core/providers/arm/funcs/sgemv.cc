@@ -17,6 +17,7 @@
 
 namespace onnxruntime {
 namespace arm {
+namespace funcs {
 
 void SgemvN(int M,
             int N,
@@ -1039,5 +1040,6 @@ void SgemvT(int M,
   "vst1.32 {d0[0]}, [%[out]]      @ save result\n"
 #endif
 
+}  // namespace funcs
 }  // namespace arm
 }  // namespace onnxruntime

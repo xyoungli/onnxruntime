@@ -19,9 +19,10 @@
 
 namespace onnxruntime {
 namespace arm {
+namespace funcs {
 
 /*
- * Sgemv: support bias and relu, incx and incy are not supported, they are set to 1 in program.
+ * Sgemv: support bias and relu
  * y = ReLU(alpha * A * x + beta * y + bias)
  * relu and bias can be set to false
  */
@@ -29,17 +30,18 @@ void Sgemv(bool trans,
            int M,
            int N,
            float alpha,
-           const float* A,
+           const float *A,
            int lda,
-           const float* x,
+           const float *x,
            int incx, // not used
            float beta,
-           float* y,
+           float *y,
            int incy, // not used
-           const float* bias,
+           const float *bias,
            bool with_bias,
            bool with_relu,
-           const ARMExecutionProvider* ctx);
+           const ARMExecutionProvider *ctx);
 
+}  // namespace funcs
 }  // namespace arm
 }  // namespace onnxruntime

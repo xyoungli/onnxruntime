@@ -17,6 +17,7 @@
 
 namespace onnxruntime {
 namespace arm {
+namespace funcs {
 
 #ifdef __aarch64__
 void prepackA_8x12(float *out,
@@ -2163,7 +2164,7 @@ void sgemm_prepacked_8x12(bool is_transB,
                           bool has_relu,
                           ARMExecutionProvider *ctx) {
   size_t l2_cache = ctx->LLCSize() > 0 ? ctx->LLCSize() : 512 * 1024;
-  auto workspace = ctx->workspace_data<float>();
+  auto workspace = ctx->WorkspaceData<float>();
   int threads = ctx->Threads();
   //! MBLOCK * x (result) + MBLOCK * k (A) + x * k (B) = l2
   int x_block = (l2_cache - (MBLOCK * K)) / (sizeof(float) * (K + MBLOCK));
@@ -2803,7 +2804,7 @@ void sgemm_prepacked_4x4(bool is_transB,
                          bool has_relu,
                          ARMExecutionProvider *ctx) {
   size_t l2_cache = ctx->LLCSize() > 0 ? ctx->LLCSize() : 512 * 1024;
-  auto workspace = ctx->workspace_data<float>();
+  auto workspace = ctx->WorkspaceData<float>();
   int threads = ctx->Threads();
 
   const int n_block = 4;
@@ -3100,7 +3101,7 @@ void sgemm_prepacked_6x8(bool is_transB,
                          bool has_relu,
                          ARMExecutionProvider* ctx) {
   size_t l2_cache = ctx->llc_size() > 0 ? ctx->llc_size() : 512 * 1024;
-  auto* workspace = ctx->workspace_data<float>();
+  auto* workspace = ctx->WorkspaceData<float>();
   int threads = ctx->threads();
   //! MBLOCK * x (result) + MBLOCK * k (A) + x * k (B) = l2
   int x_block =
@@ -3546,7 +3547,7 @@ void sgemm_prepacked_4x8(bool is_transB,
                          bool has_relu,
                          ARMExecutionProvider* ctx) {
   size_t l2_cache = ctx->llc_size() > 0 ? ctx->llc_size() : 512 * 1024;
-  auto* workspace = ctx->workspace_data<float>();
+  auto* workspace = ctx->WorkspaceData<float>();
   int threads = ctx->threads();
   //! MBLOCK * x (result) + MBLOCK * k (A) + x * k (B) = l2
   int x_block =
@@ -3873,5 +3874,6 @@ void sgemm_prepacked_4x8(bool is_transB,
 }
 #endif  // __aarch64__
 
+}  // namespace funcs
 }  // namespace arm
 }  // namespace onnxruntime

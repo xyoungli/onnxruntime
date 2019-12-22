@@ -5,6 +5,7 @@
 
 namespace onnxruntime {
 namespace arm {
+namespace funcs {
 
 void Sgemm(bool transA,
            bool transB,
@@ -41,5 +42,6 @@ void PackB(float* out,
            bool trans,
            ARMExecutionProvider* ctx);
 
+}  // namespace funcs
 }  // namespace arm
 }  // namespace onnxruntime

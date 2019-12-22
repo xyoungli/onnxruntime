@@ -19,6 +19,7 @@
 
 namespace onnxruntime {
 namespace arm {
+namespace funcs {
 
 #ifdef __aarch64__
 constexpr int MBLOCK = 8;
@@ -65,5 +66,6 @@ void SgemmPrepack(bool is_transB,
                   bool has_relu,
                   ARMExecutionProvider* ctx);
 
+}  // namespace funcs
 }  // namespace arm
 }  // namespace onnxruntime

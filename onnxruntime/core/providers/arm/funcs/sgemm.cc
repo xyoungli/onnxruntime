@@ -4,6 +4,7 @@
 
 namespace onnxruntime {
 namespace arm {
+namespace funcs {
 
 void Sgemm(bool transA,
            bool transB,
@@ -85,5 +86,6 @@ void Sgemm(bool transA,
   alloc_ptr->Free(packed_A_ptr);
 }
 
+}  // namespace funcs
 }  // namespace arm
 }  // namespace onnxruntime

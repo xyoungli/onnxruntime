@@ -21,6 +21,79 @@ struct ARMExecutionProviderInfo {
   ARMExecutionProviderInfo() = default;
 };
 
+class Buffer {
+public:
+  explicit Buffer(AllocatorPtr ptr) {
+    ORT_ENFORCE(ptr);
+    alloc_ = ptr;
+  }
+  Buffer(const Buffer &buf) = delete;
+  Buffer(const Buffer &&buf) = delete;
+  Buffer &operator=(const Buffer &buf) = delete;
+  Buffer &operator=(const Buffer &&buf) = delete;
+
+  /**
+   * \brief constructor with buffer size, in Dtype
+   */
+  explicit Buffer(AllocatorPtr ptr, size_t size);
+  explicit Buffer(AllocatorPtr ptr, void *data, size_t size);
+
+  /**
+   * \brief destructor
+   */
+  ~Buffer() { Clean(); }
+
+  /**
+   * \brief set each bytes of data_ to (c) with length of (size)
+   */
+  bool MemSet(int c, size_t size);
+
+  /**
+   * \brief re-alloc memory, only if hold the data, can be relloc
+   */
+  bool ReAlloc(size_t size);
+
+  /**
+   * \brief sync copy from other buffer
+   * @param buf
+   * @return
+   */
+  bool CopyFrom(const Buffer &buf, size_t size);
+
+  /**
+   * \brief return const data pointer
+   */
+  template <typename T>
+  const T *Data() const {
+    return reinterpret_cast<const T*>(data_);
+  }
+
+  /**
+   * \brief return mutable data pointer
+   */
+  template <typename T>
+  T *MutableData() {
+    return reinterpret_cast<T*>(data_);
+  }
+
+  /**
+   * \brief free memory
+   */
+  bool Clean();
+
+  /**
+   * \brief return total size of memory, in size
+   */
+  inline size_t Capacity() const { return capacity_; }
+
+private:
+  AllocatorPtr alloc_;
+  void *data_{nullptr};
+  bool owndata_{true};
+  size_t count_{0};
+  size_t capacity_{0};
+};
+
 // Logical device representation.
 class ARMExecutionProvider : public IExecutionProvider {
 public:
@@ -55,13 +128,12 @@ public:
   PowerMode Mode() const;
 
   template <typename T>
-  T* workspace_data() {
-    return reinterpret_cast<T*>(workspace_data_);
+  T* WorkspaceData() {
+    return reinterpret_cast<T*>(workspace_->MutableData<T>());
   }
 
 private:
-  void* workspace_data_{nullptr};
-  size_t workspace_size_{0};
+  std::shared_ptr<Buffer> workspace_{nullptr};
   arm::ARMArch arch_;
   PowerMode mode_{ARM_POWER_NO_BIND};
   uint32_t threads_{1};

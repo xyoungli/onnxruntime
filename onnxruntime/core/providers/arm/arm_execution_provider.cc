@@ -61,6 +61,7 @@ ARMExecutionProvider::ARMExecutionProvider(const ARMExecutionProviderInfo& info)
           std::numeric_limits<size_t>::max()};
 
   InsertAllocator(CreateAllocator(cpu_memory_info));
+  workspace_ = std::make_shared<Buffer>(GetAllocator(0, OrtMemTypeDefault));
   SetRunMode(mode_, threads_);
 }
 
@@ -234,10 +235,7 @@ void ARMExecutionProvider::SetRunMode(PowerMode mode, int threads) {
 }
 
 void ARMExecutionProvider::ClearWorkspace() {
-  auto alloc_ptr = GetAllocator(0, OrtMemTypeDefault);
-  alloc_ptr->Free(workspace_data_);
-  workspace_data_ = nullptr;
-  workspace_size_ = 0;
+  workspace_->Clean();
 }
 
 void ARMExecutionProvider::SetArch(int arch) {
@@ -253,13 +251,7 @@ void ARMExecutionProvider::SetCache(int L1_size, int L2_size, int L3_size) {
 }
 
 bool ARMExecutionProvider::ExtendWorkspace(size_t size) {
-  if (size > workspace_size_) {
-    auto alloc_ptr = GetAllocator(0, OrtMemTypeDefault);
-    alloc_ptr->Free(workspace_data_);
-    workspace_data_ = alloc_ptr->Alloc(size);
-    workspace_size_ = size;
-  }
-  return true;
+  return workspace_->ReAlloc(size);
 }
 
 arm::ARMArch ARMExecutionProvider::Arch() const {
@@ -296,6 +288,61 @@ int ARMExecutionProvider::L3CacheSize() const {
 
 int ARMExecutionProvider::LLCSize() const {
   return llc_size_;
+}
+
+Buffer::Buffer(AllocatorPtr ptr, size_t size) {
+  alloc_ = ptr;
+  capacity_ = size;
+  count_ = size;
+  owndata_ = true;
+  data_ = alloc_->Alloc(size);
+}
+
+Buffer::Buffer(AllocatorPtr ptr, void *data, size_t size) {
+  alloc_ = ptr;
+  capacity_ = size;
+  count_ = size;
+  data_ = data;
+  owndata_ = false;
+}
+
+
+bool Buffer::MemSet(int c, size_t size) {
+  if (!owndata_ || count_ < size) {
+    return false;
+  }
+  std::memset(data_, c, size);
+  return true;
+}
+
+bool Buffer::ReAlloc(size_t size) {
+  if (size > capacity_) {
+    if (owndata_) {
+      Clean();
+      data_ = alloc_->Alloc(size);
+      capacity_ = size;
+    } else {
+      return false;
+    }
+  }
+  count_ = size;
+  return true;
+}
+
+bool Buffer::CopyFrom(const Buffer &buf, size_t size) {
+  std::memcpy(data_, buf.data_, size);
+  return true;
+}
+
+bool Buffer::Clean() {
+  if (owndata_ && capacity_ > 0) {
+    count_ = 0;
+    capacity_ = 0;
+    owndata_ = true;
+    alloc_->Free(data_);
+  }
+  data_ = nullptr;
+  return true;
 }
 
 }  // namespace onnxruntime

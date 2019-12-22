@@ -48,13 +48,13 @@ bool TestSgemv(bool tra, int m, int n, float alpha, int lda, float beta,
   double ops = 2.0 * m * n;
   /// warmup
   for (int j = 0; j < warmup_iter; ++j) {
-    arm::Sgemv(tra, m, n, alpha, da, lda, dx, 1, beta, dy, 1, dbias, has_bias, has_relu, provider.get());
+    arm::funcs::Sgemv(tra, m, n, alpha, da, lda, dx, 1, beta, dy, 1, dbias, has_bias, has_relu, provider.get());
   }
 
   t0.Reset();
   for (int i = 0; i < repeats; ++i) {
     t0.Start();
-    arm::Sgemv(tra, m, n, alpha, da, lda, dx, 1, beta, dy, 1, dbias, has_bias, has_relu, provider.get());
+    arm::funcs::Sgemv(tra, m, n, alpha, da, lda, dx, 1, beta, dy, 1, dbias, has_bias, has_relu, provider.get());
     t0.Stop();
   }
   std::cout << "sgemv, transA: " << (tra ? "true" : "false")

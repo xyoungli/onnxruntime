@@ -27,8 +27,8 @@ void test_model(const char* model_path, int batch_size, int warmup_iter, int rep
   // OrtSessionOptionsAppendExecutionProvider_CUDA(session_options, 1);
 
 #ifdef USE_ARM
-  auto state = OrtSessionOptionsAppendExecutionProvider_ARM(session_options,
-          1, static_cast<PowerMode>(power_mode), threads);
+//  auto state = OrtSessionOptionsAppendExecutionProvider_ARM(session_options,
+//          1, static_cast<PowerMode>(power_mode), threads);
 #endif
 
   // Sets graph optimization level
@@ -131,7 +131,7 @@ void test_model(const char* model_path, int batch_size, int warmup_iter, int rep
 
   // create input tensor object from data values
   auto memory_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
-  Ort::Value input_tensor = Ort::Value::CreateTensor<float>(memory_info, input_tensor_values.data(), input_tensor_size, input_node_dims.data(), 4);
+  Ort::Value input_tensor = Ort::Value::CreateTensor<float>(memory_info, input_tensor_values.data(), input_tensor_size, input_node_dims.data(), input_node_dims.size());
   assert(input_tensor.IsTensor());
 
   std::vector<Ort::Value> output_tensors;

@@ -60,20 +60,20 @@ bool TestSgemm(bool tra, bool trb,
   //! compute
   double ops = 2.0 * m * n * k;
   //! prepack
-  int hblock = arm::GetSgemmHblock(provider.get());
+  int hblock = arm::funcs::GetSgemmHblock(provider.get());
   int m_roundup = hblock * ((m + hblock - 1) / hblock);
   auto alloc_ptr = provider->GetAllocator(0, OrtMemTypeDefault);
   auto packed_A_ptr = static_cast<float*>(
           alloc_ptr->Alloc(m_roundup * k * sizeof(float)));
 
-  arm::PrepackA(packed_A_ptr, da, alpha, lda, 0, m, 0, k, tra, provider.get());
+  arm::funcs::PrepackA(packed_A_ptr, da, alpha, lda, 0, m, 0, k, tra, provider.get());
   for (int j = 0; j < warmup_iter; ++j) {
-    arm::SgemmPrepack(trb,
-                      m, n, k,
-                      packed_A_ptr,
-                      db, ldb,
-                      beta, dc, ldc,
-                      dbias, with_bias, with_relu, provider.get());
+    arm::funcs::SgemmPrepack(trb,
+                             m, n, k,
+                             packed_A_ptr,
+                             db, ldb,
+                             beta, dc, ldc,
+                             dbias, with_bias, with_relu, provider.get());
   }
 
   for (int i = 0; i < repeats; ++i) {
@@ -81,12 +81,12 @@ bool TestSgemm(bool tra, bool trb,
       memcpy(dc_prepack, dc_backup, sizeof(float) * m * ldc);
     }
     t0.Start();
-    arm::SgemmPrepack(trb,
-                      m, n, k,
-                      packed_A_ptr,
-                      db, ldb,
-                      beta, dc_prepack, ldc,
-                      dbias, with_bias, with_relu, provider.get());
+    arm::funcs::SgemmPrepack(trb,
+                             m, n, k,
+                             packed_A_ptr,
+                             db, ldb,
+                             beta, dc_prepack, ldc,
+                             dbias, with_bias, with_relu, provider.get());
     t0.Stop();
   }
 
@@ -96,12 +96,12 @@ bool TestSgemm(bool tra, bool trb,
       memcpy(dc, dc_backup, sizeof(float) * m * ldc);
     }
     t1.Start();
-    arm::Sgemm(tra, trb,
-               m, n, k,
-               alpha, da, lda,
-               db, ldb,
-               beta, dc, ldc,
-               dbias, with_bias, with_relu, provider.get());
+    arm::funcs::Sgemm(tra, trb,
+                      m, n, k,
+                      alpha, da, lda,
+                      db, ldb,
+                      beta, dc, ldc,
+                      dbias, with_bias, with_relu, provider.get());
     t1.Stop();
   }
 

@@ -39,7 +39,7 @@ void Sgemm(bool transA,
     }
     const float* bias_ptr = nullptr;
     float* bias_new = nullptr;
-    if (N > 1) {
+    if (N > 1 && is_bias) {
       bias_new = static_cast<float*>(
               alloc_ptr->Alloc(N * sizeof(float)));
       for (int i = 0; i < N; i++) {

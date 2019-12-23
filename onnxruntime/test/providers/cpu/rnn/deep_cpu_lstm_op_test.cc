@@ -8,6 +8,7 @@
 
 #include "core/providers/cpu/rnn/deep_cpu_lstm.h"
 #include "test/providers/provider_test_utils.h"
+#include "test/timer.h"
 using namespace std;
 namespace onnxruntime {
 namespace test {
@@ -139,7 +140,13 @@ static void RunLstmTest(const std::vector<float>& X_data,
     test.AddMissingOptionalOutput<float>();
   }
 
+  Timer t0;
+  t0.Start();
+
   test.Run();
+
+  t0.Stop();
+  std::cout << "CPU LSTM, avg time: " << t0.LapTimes().Avg() << "ms\n";
 }
 
 void SimpleWeightsNoBiasTwoRows(std::string direction,
@@ -199,7 +206,7 @@ TEST(LSTMTest, ForwardSimpleWeightsNoBiasTwoRows) {
   SimpleWeightsNoBiasTwoRows("forward", Y_data, Y_h_data, Y_c_data);
 
   // test Y_h and Y_c being optional
-  SimpleWeightsNoBiasTwoRows("forward", Y_data, {}, {});
+//  SimpleWeightsNoBiasTwoRows("forward", Y_data, {}, {});
 }
 
 TEST(LSTMTest, ReverseSimpleWeightsNoBiasTwoRows) {
@@ -659,6 +666,46 @@ class LstmOpContext2x1x2x2 {
   std::vector<float> peephole_weights_;
 };
 
+TEST(LSTMTest, ONNXRuntime_TestLSTMForwardInputForget) {
+  const int seq_len = 2, batch_size = 1;
+
+  bool use_bias = true;
+  bool use_peepholes = true;
+  bool input_forget = true;
+  float clip = 999.0f;
+
+  std::vector<float> X_data = {-0.455351f, -0.276391f, -0.185934f, -0.269585f};
+
+  std::vector<float> Y_data = {-0.02510626f, 0.05612619f,
+                               -0.0314321f, 0.05087372f};
+  std::vector<float> Y_h_data = {-0.0314321f, 0.05087372f};
+  std::vector<float> Y_c_data = {-0.07474898f, 0.08480116f};
+
+  LstmOpContext2x1x2x2 context("forward");
+  // cudnn don't support peepholes
+  context.RunTest(X_data, batch_size, seq_len, nullptr, nullptr, Y_data, Y_h_data, Y_c_data, nullptr,
+                  use_bias, use_peepholes, clip, input_forget);
+}
+
+TEST(LSTMTest, ONNXRuntime_TestLSTMForwardClip) {
+  const int seq_len = 2, batch_size = 1;
+
+  bool use_bias = true;
+  bool use_peepholes = true;
+  float clip = 0.1f;
+
+  std::vector<float> X_data = {-0.455351f, -0.276391f, -0.185934f, -0.269585f};
+
+  std::vector<float> Y_data = {-0.02280854f, 0.02744377f,
+                               -0.03516197f, 0.03875681f};
+  std::vector<float> Y_h_data = {-0.03516197f, 0.03875681f};
+  std::vector<float> Y_c_data = {-0.07415761f, 0.07395997f};
+
+  LstmOpContext2x1x2x2 context("forward");
+  context.RunTest(X_data, batch_size, seq_len, nullptr, nullptr, Y_data, Y_h_data, Y_c_data, nullptr,
+                  use_bias, use_peepholes, clip);
+}
+
 TEST(LSTMTest, ONNXRuntime_TestLSTMForwardPeepHole) {
   ///////////////Attributes////////////////////////
   const int seq_len = 2, batch_size = 1;
@@ -709,46 +756,6 @@ TEST(LSTMTest, ONNXRuntime_TestLSTMForwardNoBiasUsePeepholes) {
   LstmOpContext2x1x2x2 context("forward");
   context.RunTest(X_data, batch_size, seq_len, nullptr, nullptr, Y_data, Y_h_data, Y_c_data, nullptr,
                   use_bias, use_peepholes);
-}
-
-TEST(LSTMTest, ONNXRuntime_TestLSTMForwardInputForget) {
-  const int seq_len = 2, batch_size = 1;
-
-  bool use_bias = true;
-  bool use_peepholes = true;
-  bool input_forget = true;
-  float clip = 999.0f;
-
-  std::vector<float> X_data = {-0.455351f, -0.276391f, -0.185934f, -0.269585f};
-
-  std::vector<float> Y_data = {-0.02510626f, 0.05612619f,
-                               -0.0314321f, 0.05087372f};
-  std::vector<float> Y_h_data = {-0.0314321f, 0.05087372f};
-  std::vector<float> Y_c_data = {-0.07474898f, 0.08480116f};
-
-  LstmOpContext2x1x2x2 context("forward");
-  // cudnn don't support peepholes
-  context.RunTest(X_data, batch_size, seq_len, nullptr, nullptr, Y_data, Y_h_data, Y_c_data, nullptr,
-                  use_bias, use_peepholes, clip, input_forget);
-}
-
-TEST(LSTMTest, ONNXRuntime_TestLSTMForwardClip) {
-  const int seq_len = 2, batch_size = 1;
-
-  bool use_bias = true;
-  bool use_peepholes = true;
-  float clip = 0.1f;
-
-  std::vector<float> X_data = {-0.455351f, -0.276391f, -0.185934f, -0.269585f};
-
-  std::vector<float> Y_data = {-0.02280854f, 0.02744377f,
-                               -0.03516197f, 0.03875681f};
-  std::vector<float> Y_h_data = {-0.03516197f, 0.03875681f};
-  std::vector<float> Y_c_data = {-0.07415761f, 0.07395997f};
-
-  LstmOpContext2x1x2x2 context("forward");
-  context.RunTest(X_data, batch_size, seq_len, nullptr, nullptr, Y_data, Y_h_data, Y_c_data, nullptr,
-                  use_bias, use_peepholes, clip);
 }
 
 TEST(LSTMTest, ONNXRuntime_TestLSTMBackward) {
@@ -1208,6 +1215,5 @@ TEST(LSTMTest, ONNXRuntime_TestLSTMZeroSeqInMiddle) {
                   &sequence_length, use_bias, use_peepholes, 0.0f, false, false);
 }
 #endif // USE_NGRAPH
-
 }  // namespace test
 }  // namespace onnxruntime

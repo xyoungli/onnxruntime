@@ -26,6 +26,7 @@ public:
             dynamic_cast<const ARMExecutionProvider*>(info.GetExecutionProvider()));
     ORT_ENFORCE(provider_ != nullptr);
     alloc_ptr_ = provider_->GetAllocator(0, OrtMemTypeDefault);
+    bias_ = std::make_shared<Buffer>(alloc_ptr_);
     out_iofc_ = std::make_shared<Buffer>(alloc_ptr_);
     hidden_state_ = std::make_shared<Buffer>(alloc_ptr_);
     cell_state_ = std::make_shared<Buffer>(alloc_ptr_);
@@ -33,8 +34,10 @@ public:
     o_ = std::make_shared<Buffer>(alloc_ptr_);
     f_ = std::make_shared<Buffer>(alloc_ptr_);
     c_ = std::make_shared<Buffer>(alloc_ptr_);
-    clip_ = info.GetAttrOrDefault<float>("clip", std::numeric_limits<float>::max());
-    ORT_ENFORCE(clip_ > 0.f);
+    input_reverse_ = std::make_shared<Buffer>(alloc_ptr_);
+    output_reverse_ = std::make_shared<Buffer>(alloc_ptr_);
+
+    has_clip_ = info.GetAttr<float>("clip", &clip_).IsOK();
 
     std::string direction;
     ORT_ENFORCE(info.GetAttr("direction", &direction).IsOK());
@@ -87,8 +90,26 @@ private:
                         const Tensor *P,
                         int batch_size) const;
 
-  Status GateCompute(const float* seq_iofc, const float* pre_cell_ptr, float* cell_ptr, float* hiddhen_ptr) const;
+  Status UniDirectionCompute(int num_directions,
+                             rnn::detail::Direction direction,
+                             const float* x,
+                             const float* wptr,
+                             const float* rptr,
+                             const float* bias_ptr,
+                             const float* peephole_ptr,
+                             const float* init_h,
+                             const float* init_c,
+                             const std::vector<ActivationFuncPtr>& act_funcs,
+                             float* y,
+                             float* y_h,
+                             float* y_c) const;
 
+  Status GateCompute(float* seq_iofc, const float* pre_cell_ptr,
+                     const float* peephole,
+                     const std::vector<ActivationFuncPtr>& act_funcs,
+                     float* cell_ptr, float* hiddhen_ptr) const;
+
+  mutable std::shared_ptr<Buffer> bias_{nullptr};
   mutable std::shared_ptr<Buffer> out_iofc_{nullptr};
   mutable std::shared_ptr<Buffer> hidden_state_{nullptr};
   mutable std::shared_ptr<Buffer> cell_state_{nullptr};
@@ -96,6 +117,8 @@ private:
   mutable std::shared_ptr<Buffer> o_{nullptr};
   mutable std::shared_ptr<Buffer> f_{nullptr};
   mutable std::shared_ptr<Buffer> c_{nullptr};
+  mutable std::shared_ptr<Buffer> input_reverse_{nullptr};
+  mutable std::shared_ptr<Buffer> output_reverse_{nullptr};
 
   mutable std::vector<int> vseq_len_{};
   mutable int seq_len_sum_{0};
@@ -111,9 +134,12 @@ private:
 
   int hidden_size_ = 0;
   float clip_;
+  bool has_clip_{false};
   bool input_forget_ = false;
 
   std::vector<ActivationFuncPtr> act_funcs_{};
+
+  mutable bool weights_init_{false};
 };
 
 }  // namespace arm

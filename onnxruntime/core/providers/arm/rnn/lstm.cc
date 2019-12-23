@@ -189,11 +189,119 @@ ActivationFuncPtr ActivationFuncByName(const std::string& act_name) {
   return nullptr;
 }
 
+void ReverseSequence(const float* inputs,
+                     float* inputs_reverse,
+                     const std::vector<int>& sequence_lengths,
+                     int max_sequence_length,
+                     int batch_size,
+                     int input_size,
+                     int num_directions) {
+  for (int i = 0; i < batch_size; i++) {
+    int seq_len = sequence_lengths[i];
+#pragma omp parallel for
+    for (int j = 0; j < seq_len; j++) {
+      auto src = inputs + j * batch_size * input_size + i * input_size;
+      auto dest = inputs_reverse + num_directions * (seq_len - j - 1) * batch_size * input_size + i * input_size;
+      std::memcpy(dest, src, input_size * sizeof(float));
+    }
+#pragma omp parallel for
+    for (int j = seq_len; j < max_sequence_length; j++) {
+      auto  src = inputs + j * batch_size * input_size + i * input_size;
+      auto dest = inputs_reverse + num_directions * j * batch_size * input_size + i * input_size;
+      std::memcpy(dest, src, input_size * sizeof(float));
+    }
+  }
+}
+
+void GateClip(const float* din, float* dout, float clip, int size) {
+#ifdef USE_OPENMP
+  int threads = omp_get_num_threads();
+#else
+  int threads = 1;
+#endif
+  int nums_per_thread = size / threads;
+  int remain = size - threads * nums_per_thread;
+  int neon_loop_cnt = nums_per_thread >> 4;
+  int neon_loop_remain = nums_per_thread - (neon_loop_cnt << 4);
+  float32x4_t vclip = vdupq_n_f32(clip);
+  float clip_minus = -1.f * clip;
+  float32x4_t vclip_minus = vdupq_n_f32(clip_minus);
+#pragma omp parallel for
+  for (int i = 0; i < threads; ++i) {
+    int idx_start = i * nums_per_thread;
+    const float* ptr_in_thread = din + idx_start;
+    float* ptr_out_thread = dout + idx_start;
+    for (int num = 0; num < neon_loop_cnt; ++num) {
+
+      vst1q_f32(ptr_out_thread, vmaxq_f32(vminq_f32(vld1q_f32(ptr_in_thread), vclip), vclip_minus));
+      vst1q_f32(ptr_out_thread + 4, vmaxq_f32(vminq_f32(vld1q_f32(ptr_in_thread + 4), vclip), vclip_minus));
+      vst1q_f32(ptr_out_thread + 8, vmaxq_f32(vminq_f32(vld1q_f32(ptr_in_thread + 8), vclip), vclip_minus));
+      vst1q_f32(ptr_out_thread + 12, vmaxq_f32(vminq_f32(vld1q_f32(ptr_in_thread + 12), vclip), vclip_minus));
+      ptr_in_thread += 16;
+      ptr_out_thread += 16;
+    }
+    for (int j = 0; j < neon_loop_remain; ++j) {
+      *ptr_out_thread = std::max(std::min(*ptr_in_thread, clip), clip_minus);
+      ptr_in_thread++;
+      ptr_out_thread++;
+    }
+  }
+  float* out_ptr_remain = dout + threads * nums_per_thread;
+  const float* in_ptr_remain = din + threads * nums_per_thread;
+  for (int j = 0; j < remain; ++j) {
+    *out_ptr_remain = std::max(std::min(*in_ptr_remain, clip), clip_minus);
+    in_ptr_remain++;
+    out_ptr_remain++;
+  }
+}
+
+void InputForget(const float* din, float* dout, int size) {
+#ifdef USE_OPENMP
+  int threads = omp_get_num_threads();
+#else
+  int threads = 1;
+#endif
+  int nums_per_thread = size / threads;
+  int remain = size - threads * nums_per_thread;
+  int neon_loop_cnt = nums_per_thread >> 4;
+  int neon_loop_remain = nums_per_thread - (neon_loop_cnt << 4);
+  float32x4_t vones = vdupq_n_f32(1.f);
+#pragma omp parallel for
+  for (int i = 0; i < threads; ++i) {
+    int idx_start = i * nums_per_thread;
+    const float* ptr_in_thread = din + idx_start;
+    float* ptr_out_thread = dout + idx_start;
+    for (int num = 0; num < neon_loop_cnt; ++num) {
+      vst1q_f32(ptr_out_thread, vsubq_f32(vones, vld1q_f32(ptr_in_thread)));
+      vst1q_f32(ptr_out_thread + 4, vsubq_f32(vones, vld1q_f32(ptr_in_thread + 4)));
+      vst1q_f32(ptr_out_thread + 8, vsubq_f32(vones, vld1q_f32(ptr_in_thread + 8)));
+      vst1q_f32(ptr_out_thread + 12, vsubq_f32(vones, vld1q_f32(ptr_in_thread + 12)));
+      ptr_in_thread += 16;
+      ptr_out_thread += 16;
+    }
+    for (int j = 0; j < neon_loop_remain; ++j) {
+      *ptr_out_thread = 1.f - *ptr_in_thread;
+      ptr_in_thread++;
+      ptr_out_thread++;
+    }
+  }
+  float* out_ptr_remain = dout + threads * nums_per_thread;
+  const float* in_ptr_remain = din + threads * nums_per_thread;
+  for (int j = 0; j < remain; ++j) {
+    *out_ptr_remain = 1.f - *in_ptr_remain;
+    in_ptr_remain++;
+    out_ptr_remain++;
+  }
+}
+
 Status LstmOp::Compute(OpKernelContext *context) const {
+  if (!weights_init_) {
+    PrepareWeights(*context);
+    weights_init_ = true;
+  }
   PrepareWorkspace(*context);
   const Tensor &X = *context->Input<Tensor>(0);  // inputs. [seq_length, batch_size, input_size]
   Status status;
-  // auto& logger = context->Logger();
   if (X.IsDataType<float>()) {
     status = ComputeImplFP32(*context);
   } else if (X.IsDataType<double>()) {
@@ -242,9 +350,7 @@ Status LstmOp::ValidateInputs(const Tensor &X, const Tensor &W, const Tensor &R,
 Status LstmOp::PrepareWorkspace(onnxruntime::OpKernelContext &context) const {
   const Tensor &X = *context.Input<Tensor>(0);  // inputs. [seq_length, batch_size, input_size]
   // optional
-  auto *B = context.Input<Tensor>(3);              // bias. [num_directions, 8*hidden_size]
   auto *sequence_lens = context.Input<Tensor>(4);  // [batch_size]
-  auto *P = context.Input<Tensor>(7);              // peephole weights. [num_directions, 3*hidden_size]
   auto& xshape = X.Shape();
   seq_len_ = xshape[0];
   batch_size_ = xshape[1];
@@ -269,7 +375,7 @@ Status LstmOp::PrepareWorkspace(onnxruntime::OpKernelContext &context) const {
 
   size_t size_iofc = seq_len_sum_ * hidden_size_ * 4 * sizeof(float);
   out_iofc_->ReAlloc(size_iofc);
-  size_t hidden_state_size = sizeof(float) * batch_size_ * hidden_size_ * num_directions_;
+  size_t hidden_state_size = sizeof(float) * batch_size_ * hidden_size_;
   hidden_state_->ReAlloc(hidden_state_size);
   hidden_state_->MemSet(0, hidden_state_size);
   cell_state_->ReAlloc(hidden_state_size);
@@ -278,6 +384,10 @@ Status LstmOp::PrepareWorkspace(onnxruntime::OpKernelContext &context) const {
   o_->ReAlloc(hidden_state_size);
   f_->ReAlloc(hidden_state_size);
   c_->ReAlloc(hidden_state_size);
+  if (direction_ != rnn::detail::kForward) {
+    input_reverse_->ReAlloc(seq_len_ * batch_size_ * input_size_ * sizeof(float));
+    output_reverse_->ReAlloc(seq_len_ * batch_size_ * hidden_size_ * sizeof(float));
+  }
   return Status::OK();
 }
 
@@ -291,6 +401,7 @@ Status LstmOp::ComputeImplFP32(OpKernelContext &context) const {
   // optional
   auto *initial_h = context.Input<Tensor>(5);      // initial hidden. [num_directions, batch_size, hidden_size]
   auto *initial_c = context.Input<Tensor>(6);      // initial cell. [num_directions, batch_size, hidden_size]
+  auto *P = context.Input<Tensor>(7);              // peephole weights. [num_directions, 3*hidden_size]
 
   Status status;
 //  status = ValidateInputs(X, W, R, B, sequence_lens, initial_h, initial_c, P, batch_size);
@@ -310,6 +421,9 @@ Status LstmOp::ComputeImplFP32(OpKernelContext &context) const {
   float* output_h = Y_h == nullptr? nullptr : Y_h->MutableData<float>();
   float* output_c = Y_c == nullptr? nullptr : Y_c->MutableData<float>();
 
+  const float* bias_ptr = bias_->Capacity() > 0? bias_->Data<float>() : nullptr;
+  const float* peephole_ptr = P == nullptr? nullptr : P->Data<float>();
+
   // Reset output and return if max sequence length is 0
   if (max_seq_len_ == 0) {
     if (Y != nullptr) std::fill_n(Y->MutableData<float>(), Y_dims.Size(), 0.f);
@@ -317,82 +431,234 @@ Status LstmOp::ComputeImplFP32(OpKernelContext &context) const {
     if (Y_c != nullptr) std::fill_n(Y_c->MutableData<float>(), Y_c_dims.Size(), 0.f);
     return Status::OK();
   }
+  if (num_directions_ == 1) {
+    UniDirectionCompute(num_directions_, direction_,
+                        din_ptr, w_ptr, r_ptr,
+                        bias_ptr, peephole_ptr,
+                        initial_h? initial_h->Data<float>() : nullptr,
+                        initial_c? initial_c->Data<float>() : nullptr,
+                        act_funcs_,
+                        output, output_h, output_c);
+  } else {
+    // num_directions_ = 2
+    auto w_ptr1 = w_ptr;
+    auto w_ptr2 = w_ptr + 4 * hidden_size_ * input_size_;
+    auto r_ptr1 = r_ptr;
+    auto r_ptr2 = r_ptr + 4 * hidden_size_ * hidden_size_;
+    const float* init_h1 = nullptr;
+    const float* init_h2 = nullptr;
+    const float* init_c1 = nullptr;
+    const float* init_c2 = nullptr;
+    const float* bias_ptr1 = nullptr;
+    const float* bias_ptr2 = nullptr;
+    const float* peephole_ptr1 = nullptr;
+    const float* peephole_ptr2 = nullptr;
 
+    int output_step_size = batch_size_ * hidden_size_;
+    auto output1 = output;
+    float* output2 = output? output + output_step_size : nullptr;
+    auto output_h1 = output_h;
+    float* output_h2 = output_h? output_h + output_step_size : nullptr;
+    auto output_c1 = output_c;
+    float* output_c2 = output_c? output_c + output_step_size : nullptr;
+
+    if (initial_h) {
+      init_h1 = initial_h->Data<float>();
+      init_h2 = init_h1 + output_step_size;
+    }
+    if (initial_c) {
+      init_c1 = initial_c->Data<float>();
+      init_c2 = init_c1 + output_step_size;
+    }
+    if (bias_ptr) {
+      bias_ptr1 = bias_ptr;
+      bias_ptr2 = bias_ptr1 + 4 * hidden_size_;
+    }
+    if (peephole_ptr) {
+      peephole_ptr1 = peephole_ptr;
+      peephole_ptr2 = peephole_ptr1 + 3 * hidden_size_;
+    }
+    // forward
+    UniDirectionCompute(num_directions_, rnn::detail::kForward,
+                        din_ptr, w_ptr1, r_ptr1,
+                        bias_ptr1, peephole_ptr1,
+                        init_h1, init_c1,
+                        act_funcs_,
+                        output1, output_h1, output_c1);
+    // reverse
+    std::vector<ActivationFuncPtr> act_funcs_reverse(act_funcs_.begin() + 3, act_funcs_.end());
+    UniDirectionCompute(num_directions_, rnn::detail::kReverse,
+                        din_ptr, w_ptr2, r_ptr2,
+                        bias_ptr2, peephole_ptr2,
+                        init_h2, init_c2,
+                        act_funcs_reverse,
+                        output2, output_h2, output_c2);
+  }
+  return Status::OK();
+}
+
+Status LstmOp::UniDirectionCompute(int num_directions,
+                                   rnn::detail::Direction direction,
+                                   const float* x,
+                                   const float* wptr,
+                                   const float* rptr,
+                                   const float* bias_ptr,
+                                   const float* peephole_ptr,
+                                   const float* init_h,
+                                   const float* init_c,
+                                   const std::vector<ActivationFuncPtr>& act_funcs,
+                                   float* y,
+                                   float* y_h,
+                                   float* y_c) const {
+  float* origin_y = y;
+  int step_size = batch_size_ * hidden_size_ * 4;
+  int state_step_size = batch_size_ * hidden_size_;
+  int y_step_size = state_step_size;
+  if (num_directions == 2 && direction == rnn::detail::kForward) {
+    y_step_size = 2 * state_step_size;
+  }
+  if (direction == rnn::detail::kReverse) {
+    auto input_reverse_ptr = input_reverse_->MutableData<float>();
+    ReverseSequence(x, input_reverse_ptr,
+                    vseq_len_, max_seq_len_, batch_size_,
+                    input_size_, 1);
+    x = input_reverse_ptr;
+    if (y) {
+      y = output_reverse_->MutableData<float>();
+    }
+  }
   // x * W
+  // preset bias
+  int row_len = 4 * hidden_size_;
+  float beta = 0.f;
+  if (bias_ptr) {
+    for (int i = 0; i < seq_len_sum_; ++i) {
+      std::memcpy(out_iofc_->MutableData<float>() + i * row_len, bias_ptr, sizeof(float) * row_len);
+    }
+    beta = 1.f;
+  }
   funcs::Sgemm(false, true,
                seq_len_sum_, 4 * hidden_size_, input_size_,
-               1.f, din_ptr, input_size_,
-               w_ptr, input_size_,
-               0.f, out_iofc_->MutableData<float>(), 4 * hidden_size_,
+               1.f, x, input_size_,
+               wptr, input_size_,
+               beta, out_iofc_->MutableData<float>(), 4 * hidden_size_,
                nullptr, false, false, provider_);
-
   //run through steps sequentially
-  int step_size = batch_size_ * hidden_size_ * 4;
   for (int step = 0; step < max_seq_len_; step++) {
     // h(t-1) * R
     auto *pre_h_ptr = hidden_state_->Data<float>();
     auto *h_ptr = hidden_state_->MutableData<float>();
     auto *pre_c_ptr = cell_state_->Data<float>();
     auto *c_ptr = cell_state_->MutableData<float>();
-    if (step == 0 && initial_h) {
-      pre_h_ptr = initial_h->Data<float>();
+    if (step == 0) {
+      if (init_h) {
+        pre_h_ptr = init_h;
+      } else {
+        hidden_state_->MemSet(0, state_step_size * sizeof(float));
+      }
+      if (init_c) {
+        pre_c_ptr = init_c;
+      } else {
+        cell_state_->MemSet(0, state_step_size * sizeof(float));
+      }
     }
-    if (step == 0 && initial_c) {
-      pre_c_ptr = initial_c->Data<float>();
-    }
+
     float *step_out_ptr = out_iofc_->MutableData<float>() + step * step_size;
     // calculate Xt*(W[iofc]^T) + Ht-1*R[iofc]
     funcs::Sgemm(false, true,
                  batch_size_, 4 * hidden_size_, hidden_size_,
                  1.f, pre_h_ptr, hidden_size_,
-                 r_ptr, hidden_size_,
+                 rptr, hidden_size_,
                  1.f, step_out_ptr, 4 * hidden_size_,
                  nullptr, false, false, provider_);
-
+//    printf("step sgemm:\n");
+//    print_data(step_out_ptr, batch_size_ * 4 * hidden_size_, 4 * hidden_size_);
     // gate compute
-//    if (step == max_seq_len_ - 1 && output_h) {
-//      h_ptr = output_h;
-//    }
-//    if (step == max_seq_len_ - 1 && output_c) {
-//      c_ptr = output_c;
-//    }
-    GateCompute(step_out_ptr, pre_c_ptr, c_ptr, h_ptr);
-    if (output) {
-      std::memcpy(output + step * batch_size_ * hidden_size_, h_ptr, sizeof(float) * batch_size_ * hidden_size_);
+    GateCompute(step_out_ptr, pre_c_ptr, peephole_ptr, act_funcs, c_ptr, h_ptr);
+    if (y) {
+      std::memcpy(y + step * y_step_size, h_ptr, sizeof(float) * state_step_size);
     }
+#pragma omp parallel for
     for (int i = 0; i < batch_size_; ++i) {
+      if (vseq_len_[i] <= step && y) {
+        std::memset(y + step * y_step_size + i * hidden_size_, 0, sizeof(float) * hidden_size_);
+      }
       if (vseq_len_[i] == step + 1) {
-       if (output_h) {
-         std::memcpy(output_h + i * hidden_size_, h_ptr + i * hidden_size_, sizeof(float) * hidden_size_);
-       }
-       if (output_c) {
-         std::memcpy(output_c + i * hidden_size_, c_ptr + i * hidden_size_, sizeof(float) * hidden_size_);
-       }
+        if (y_h) {
+          std::memcpy(y_h + i * hidden_size_, h_ptr + i * hidden_size_, sizeof(float) * hidden_size_);
+        }
+        if (y_c) {
+          std::memcpy(y_c + i * hidden_size_, c_ptr + i * hidden_size_, sizeof(float) * hidden_size_);
+        }
       }
     }
+  }
+  if (y && direction == rnn::detail::kReverse) {
+    ReverseSequence(y, origin_y, vseq_len_, seq_len_,
+                    batch_size_, hidden_size_, num_directions);
   }
   return Status::OK();
 }
 
-Status LstmOp::GateCompute(const float* seq_iofc, const float* pre_cell_ptr, float* cell_ptr, float* hiddhen_ptr) const {
+Status LstmOp::GateCompute(float* seq_iofc, const float* pre_cell_ptr,
+                           const float* peephole,
+                           const std::vector<ActivationFuncPtr>& act_funcs,
+                           float* cell_ptr, float* hidden_ptr) const {
+  // check peephole and clip
+  bool clip_done = false;
+  if (!peephole && has_clip_ && !input_forget_) {
+    GateClip(seq_iofc, seq_iofc, clip_, batch_size_ * 4 * hidden_size_);
+    clip_done = true;
+  }
   // split to i, o, f, c
   auto iptr = i_->MutableData<float>();
   auto optr = o_->MutableData<float>();
   auto fptr = f_->MutableData<float>();
   auto cptr = c_->MutableData<float>();
-  std::vector<float*> iofc_ptr = {iptr, optr,fptr, cptr};
+  std::vector<float*> iofc_ptr = {iptr, optr, fptr, cptr};
   int compute_size = batch_size_ * hidden_size_;
   funcs::Split(seq_iofc, iofc_ptr, batch_size_, {hidden_size_, hidden_size_, hidden_size_, hidden_size_});
-  // do activation
-  act_funcs_[0](iptr, iptr, compute_size);
-  act_funcs_[0](optr, optr, compute_size);
-  act_funcs_[0](fptr, fptr, compute_size);
-  act_funcs_[1](cptr, cptr, compute_size);
+
+  // check peephole, input gate
+  if (peephole) {
+#pragma omp parallel for
+    for (int i = 0; i < batch_size_; ++i) {
+      auto iptr_batch = iptr + i * hidden_size_;
+      auto pre_cell_batch = pre_cell_ptr + i * hidden_size_;
+      funcs::ElementwiseMac(pre_cell_batch, peephole, iptr_batch, hidden_size_);
+    }
+  }
+  // check clip, input gate, cell
+  if (has_clip_ && !clip_done) {
+    GateClip(iptr, iptr, clip_, compute_size);
+    GateClip(cptr, cptr, clip_, compute_size);
+  }
+
+  // do activation, i, c
+  act_funcs[0](iptr, iptr, compute_size);
+  act_funcs[1](cptr, cptr, compute_size);
+
+  // check input forget, forget gate
+  if (input_forget_) {
+    InputForget(iptr, fptr, compute_size);
+  } else {
+    if (peephole) {
+#pragma omp parallel for
+      for (int i = 0; i < batch_size_; ++i) {
+        auto fptr_batch = fptr + i * hidden_size_;
+        auto pre_cell_batch = pre_cell_ptr + i * hidden_size_;
+        funcs::ElementwiseMac(pre_cell_batch, peephole + 2 * hidden_size_, fptr_batch, hidden_size_);
+      }
+    }
+    if (has_clip_ && !clip_done) {
+      GateClip(fptr, fptr, clip_, compute_size);
+    }
+    // do activation, f
+    act_funcs[0](fptr, fptr, compute_size);
+  }
 
 //  printf("idata:\n");
 //  print_data(iptr, compute_size, hidden_size_);
-//  printf("odata:\n");
-//  print_data(optr, compute_size, hidden_size_);
 //  printf("fdata:\n");
 //  print_data(fptr, compute_size, hidden_size_);
 //  printf("cdata:\n");
@@ -402,15 +668,53 @@ Status LstmOp::GateCompute(const float* seq_iofc, const float* pre_cell_ptr, flo
   funcs::ElementwiseMul(fptr, pre_cell_ptr, cell_ptr, compute_size);
   // Ct = ct_tmp + ct * it
   funcs::ElementwiseMac(cptr, iptr, cell_ptr, compute_size);
-//  printf("c:\n");
+//  printf("CCur:\n");
 //  print_data(cell_ptr, compute_size, hidden_size_);
-  // ht_tmp = tanh(Ct)
-  act_funcs_[2](cell_ptr, hiddhen_ptr, compute_size);
-  // Ht = ot * ht_tmp
-  funcs::ElementwiseMul(hiddhen_ptr, optr, hiddhen_ptr, compute_size);
-//  printf("h:\n");
-//  print_data(hiddhen_ptr, compute_size, hidden_size_);
 
+  // check peephole
+  if (peephole) {
+#pragma omp parallel for
+    for (int i = 0; i < batch_size_; ++i) {
+      funcs::ElementwiseMac(cell_ptr + i * hidden_size_, peephole + hidden_size_,
+                            optr + i * hidden_size_, hidden_size_);
+    }
+  }
+  // check clip
+  if (has_clip_ && !clip_done) {
+    GateClip(optr, optr, clip_, compute_size);
+  }
+//  printf("oclipped:\n");
+//  print_data(optr, hidden_size_ * batch_size_, hidden_size_);
+  // do activation, o
+  act_funcs[0](optr, optr, compute_size);
+//  printf("odata:\n");
+//  print_data(optr, compute_size, hidden_size_);
+
+  // ht_tmp = tanh(Ct)
+  act_funcs[2](cell_ptr, hidden_ptr, compute_size);
+  // Ht = ot * ht_tmp
+  funcs::ElementwiseMul(hidden_ptr, optr, hidden_ptr, compute_size);
+//  printf("h:\n");
+//  print_data(hidden_ptr, compute_size, hidden_size_);
+
+  return Status::OK();
+}
+
+Status LstmOp::PrepareWeights(onnxruntime::OpKernelContext &context) const {
+  auto *B = context.Input<Tensor>(3);              // bias. [num_directions, 8*hidden_size]
+  if (B != nullptr) {
+    bias_->ReAlloc(num_directions_ * 4 * hidden_size_ * sizeof(float));
+    // add W bias with R bias
+    int offset = 4 * hidden_size_;
+    for (int i = 0; i < num_directions_; ++i) {
+      auto bias_new_ptr = bias_->MutableData<float>() + i * offset;
+      auto w_bias_origin_ptr = B->Data<float>() + i * offset;
+      auto r_bias_origin_ptr = w_bias_origin_ptr + offset;
+      for (int j = 0; j < offset; ++j) {
+        bias_new_ptr[j] = w_bias_origin_ptr[j] + r_bias_origin_ptr[j];
+      }
+    }
+  }
   return Status::OK();
 }
 

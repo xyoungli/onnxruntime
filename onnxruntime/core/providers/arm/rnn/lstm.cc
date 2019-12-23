@@ -20,7 +20,6 @@
 #include "core/providers/arm/funcs/activation.h"
 #include "core/providers/arm/funcs/split.h"
 #include "core/providers/arm/funcs/elementwise.h"
-#include "test/data_utils.h"
 
 #ifdef _MSC_VER
 #pragma warning(pop)
@@ -388,6 +387,11 @@ Status LstmOp::PrepareWorkspace(onnxruntime::OpKernelContext &context) const {
     input_reverse_->ReAlloc(seq_len_ * batch_size_ * input_size_ * sizeof(float));
     output_reverse_->ReAlloc(seq_len_ * batch_size_ * hidden_size_ * sizeof(float));
   }
+  Status status = ValidateInputs(X, *context.Input<Tensor>(1), *context.Input<Tensor>(2),
+                                 context.Input<Tensor>(3), sequence_lens,
+                                 context.Input<Tensor>(5), context.Input<Tensor>(6),
+                                 context.Input<Tensor>(7), batch_size_);
+  ORT_RETURN_IF_ERROR(status);
   return Status::OK();
 }
 
@@ -402,10 +406,6 @@ Status LstmOp::ComputeImplFP32(OpKernelContext &context) const {
   auto *initial_h = context.Input<Tensor>(5);      // initial hidden. [num_directions, batch_size, hidden_size]
   auto *initial_c = context.Input<Tensor>(6);      // initial cell. [num_directions, batch_size, hidden_size]
   auto *P = context.Input<Tensor>(7);              // peephole weights. [num_directions, 3*hidden_size]
-
-  Status status;
-//  status = ValidateInputs(X, W, R, B, sequence_lens, initial_h, initial_c, P, batch_size);
-//  ORT_RETURN_IF_ERROR(status);
 
   // LSTM outputs are optional but must be in the same order
   TensorShape Y_dims{seq_len_, num_directions_, batch_size_, hidden_size_};
@@ -571,8 +571,6 @@ Status LstmOp::UniDirectionCompute(int num_directions,
                  rptr, hidden_size_,
                  1.f, step_out_ptr, 4 * hidden_size_,
                  nullptr, false, false, provider_);
-//    printf("step sgemm:\n");
-//    print_data(step_out_ptr, batch_size_ * 4 * hidden_size_, 4 * hidden_size_);
     // gate compute
     GateCompute(step_out_ptr, pre_c_ptr, peephole_ptr, act_funcs, c_ptr, h_ptr);
     if (y) {
@@ -657,19 +655,10 @@ Status LstmOp::GateCompute(float* seq_iofc, const float* pre_cell_ptr,
     act_funcs[0](fptr, fptr, compute_size);
   }
 
-//  printf("idata:\n");
-//  print_data(iptr, compute_size, hidden_size_);
-//  printf("fdata:\n");
-//  print_data(fptr, compute_size, hidden_size_);
-//  printf("cdata:\n");
-//  print_data(cptr, compute_size, hidden_size_);
-
   // ct_tmp = Ct-1 * ft
   funcs::ElementwiseMul(fptr, pre_cell_ptr, cell_ptr, compute_size);
   // Ct = ct_tmp + ct * it
   funcs::ElementwiseMac(cptr, iptr, cell_ptr, compute_size);
-//  printf("CCur:\n");
-//  print_data(cell_ptr, compute_size, hidden_size_);
 
   // check peephole
   if (peephole) {
@@ -683,19 +672,13 @@ Status LstmOp::GateCompute(float* seq_iofc, const float* pre_cell_ptr,
   if (has_clip_ && !clip_done) {
     GateClip(optr, optr, clip_, compute_size);
   }
-//  printf("oclipped:\n");
-//  print_data(optr, hidden_size_ * batch_size_, hidden_size_);
   // do activation, o
   act_funcs[0](optr, optr, compute_size);
-//  printf("odata:\n");
-//  print_data(optr, compute_size, hidden_size_);
 
   // ht_tmp = tanh(Ct)
   act_funcs[2](cell_ptr, hidden_ptr, compute_size);
   // Ht = ot * ht_tmp
   funcs::ElementwiseMul(hidden_ptr, optr, hidden_ptr, compute_size);
-//  printf("h:\n");
-//  print_data(hidden_ptr, compute_size, hidden_size_);
 
   return Status::OK();
 }

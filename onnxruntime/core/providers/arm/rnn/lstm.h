@@ -25,17 +25,17 @@ public:
     provider_ = const_cast<ARMExecutionProvider*>(
             dynamic_cast<const ARMExecutionProvider*>(info.GetExecutionProvider()));
     ORT_ENFORCE(provider_ != nullptr);
-    alloc_ptr_ = provider_->GetAllocator(0, OrtMemTypeDefault);
-    bias_ = std::make_shared<Buffer>(alloc_ptr_);
-    out_iofc_ = std::make_shared<Buffer>(alloc_ptr_);
-    hidden_state_ = std::make_shared<Buffer>(alloc_ptr_);
-    cell_state_ = std::make_shared<Buffer>(alloc_ptr_);
-    i_ = std::make_shared<Buffer>(alloc_ptr_);
-    o_ = std::make_shared<Buffer>(alloc_ptr_);
-    f_ = std::make_shared<Buffer>(alloc_ptr_);
-    c_ = std::make_shared<Buffer>(alloc_ptr_);
-    input_reverse_ = std::make_shared<Buffer>(alloc_ptr_);
-    output_reverse_ = std::make_shared<Buffer>(alloc_ptr_);
+    auto alloc_ptr = provider_->GetAllocator(0, OrtMemTypeDefault);
+    bias_ = std::make_shared<Buffer>(alloc_ptr);
+    out_iofc_ = std::make_shared<Buffer>(alloc_ptr);
+    hidden_state_ = std::make_shared<Buffer>(alloc_ptr);
+    cell_state_ = std::make_shared<Buffer>(alloc_ptr);
+    i_ = std::make_shared<Buffer>(alloc_ptr);
+    o_ = std::make_shared<Buffer>(alloc_ptr);
+    f_ = std::make_shared<Buffer>(alloc_ptr);
+    c_ = std::make_shared<Buffer>(alloc_ptr);
+    input_reverse_ = std::make_shared<Buffer>(alloc_ptr);
+    output_reverse_ = std::make_shared<Buffer>(alloc_ptr);
 
     has_clip_ = info.GetAttr<float>("clip", &clip_).IsOK();
 
@@ -128,7 +128,6 @@ private:
   mutable int input_size_{0};
 
   ARMExecutionProvider* provider_{nullptr};
-  AllocatorPtr alloc_ptr_{nullptr};
   rnn::detail::Direction direction_;
   int num_directions_;
 

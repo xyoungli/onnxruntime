@@ -42,56 +42,23 @@ void ActReLU<float>(const float* din, float* dout, int size) {
   for (int i = 0; i < threads; ++i) {
     const float* ptr_in_thread = din + i * nums_per_thread;
     float* ptr_out_thread = dout + i * nums_per_thread;
-#ifdef __aarch64__
     for (int num = 0; num < neon_loop_cnt; ++num) {
       float32x4_t vr0 = vld1q_f32(ptr_in_thread);
-      ptr_in_thread += 4;
-      float32x4_t vr1 = vld1q_f32(ptr_in_thread);
-      ptr_in_thread += 4;
-      float32x4_t vr2 = vld1q_f32(ptr_in_thread);
-      ptr_in_thread += 4;
-      float32x4_t vr3 = vld1q_f32(ptr_in_thread);
-      ptr_in_thread += 4;
+      float32x4_t vr1 = vld1q_f32(ptr_in_thread + 4);
+      float32x4_t vr2 = vld1q_f32(ptr_in_thread + 8);
+      float32x4_t vr3 = vld1q_f32(ptr_in_thread + 12);
+      ptr_in_thread += 16;
       vr0 = vmaxq_f32(vr0, vzero);
       vr1 = vmaxq_f32(vr1, vzero);
       vr2 = vmaxq_f32(vr2, vzero);
       vr3 = vmaxq_f32(vr3, vzero);
       vst1q_f32(ptr_out_thread, vr0);
-      ptr_out_thread += 4;
-      vst1q_f32(ptr_out_thread, vr1);
-      ptr_out_thread += 4;
-      vst1q_f32(ptr_out_thread, vr2);
-      ptr_out_thread += 4;
-      vst1q_f32(ptr_out_thread, vr3);
-      ptr_out_thread += 4;
+      vst1q_f32(ptr_out_thread + 4, vr1);
+      vst1q_f32(ptr_out_thread + 8, vr2);
+      vst1q_f32(ptr_out_thread + 12, vr3);
+      ptr_out_thread += 16;
     }
 
-#else
-    int cnt = neon_loop_cnt;
-    if (cnt > 0) {
-      asm volatile(
-          "1:                                     @ loop header\n"
-          "vld1.32  {d0-d3}, [%[din]]!            @ load din 0\n"
-          "vld1.32  {d4-d7}, [%[din]]!            @ load din 0\n"
-
-          "vmax.f32 q8, q0, %q[vzero]             @ relu\n"
-          "vmax.f32 q9, q1, %q[vzero]             @ relu\n"
-          "vmax.f32 q10, q2, %q[vzero]            @ relu\n"
-          "vmax.f32 q11, q3, %q[vzero]            @ relu\n"
-
-          "vst1.32  {d16-d19}, [%[dout]]!         @ store result, add pointer\n"
-          "vst1.32  {d20-d23}, [%[dout]]!         @ store result, add pointer\n"
-
-          "subs %[cnt], #1                        @ loop count minus 1\n"
-          "bne    1b                              @ jump to main loop start "
-          "point\n"
-          : [dout] "+r"(ptr_out_thread),
-            [din] "+r"(ptr_in_thread),
-            [cnt] "+r"(cnt)
-          : [vzero] "w"(vzero)
-          : "cc", "memory", "q0", "q1", "q2", "q3", "q8", "q9", "q10", "q11");
-    }
-#endif
     for (int j = 0; j < neon_loop_remain; ++j) {
       ptr_out_thread[0] = ptr_in_thread[0] > 0.f ? ptr_in_thread[0] : 0.f;
       ptr_in_thread++;
@@ -125,16 +92,12 @@ void ActReLUNeg<float>(const float* din, float* dout, int size,
   for (int i = 0; i < threads; ++i) {
     const float* ptr_in_thread = din + i * nums_per_thread;
     float* ptr_out_thread = dout + i * nums_per_thread;
-#ifdef __aarch64__
     for (int num = 0; num < neon_loop_cnt; ++num) {
       float32x4_t vr0 = vld1q_f32(ptr_in_thread);
-      ptr_in_thread += 4;
-      float32x4_t vr1 = vld1q_f32(ptr_in_thread);
-      ptr_in_thread += 4;
-      float32x4_t vr2 = vld1q_f32(ptr_in_thread);
-      ptr_in_thread += 4;
-      float32x4_t vr3 = vld1q_f32(ptr_in_thread);
-      ptr_in_thread += 4;
+      float32x4_t vr1 = vld1q_f32(ptr_in_thread + 4);
+      float32x4_t vr2 = vld1q_f32(ptr_in_thread + 8);
+      float32x4_t vr3 = vld1q_f32(ptr_in_thread + 12);
+      ptr_in_thread += 16;
 
       uint32x4_t vm0 = vcgeq_f32(vr0, vzero);
       uint32x4_t vm1 = vcgeq_f32(vr1, vzero);
@@ -152,68 +115,12 @@ void ActReLUNeg<float>(const float* din, float* dout, int size,
       float32x4_t vo3 = vbslq_f32(vm3, vr3, vn3);
 
       vst1q_f32(ptr_out_thread, vo0);
-      ptr_out_thread += 4;
-      vst1q_f32(ptr_out_thread, vo1);
-      ptr_out_thread += 4;
-      vst1q_f32(ptr_out_thread, vo2);
-      ptr_out_thread += 4;
-      vst1q_f32(ptr_out_thread, vo3);
-      ptr_out_thread += 4;
+      vst1q_f32(ptr_out_thread + 4, vo1);
+      vst1q_f32(ptr_out_thread + 8, vo2);
+      vst1q_f32(ptr_out_thread + 12, vo3);
+      ptr_out_thread += 16;
     }
 
-#else
-    int cnt = neon_loop_cnt;
-    if (cnt > 0) {
-      asm volatile(
-          "1:                                             @ loop header\n"
-          "vld1.32  {d0-d3}, [%[din]]!            @ load din 0\n"
-          "vld1.32  {d4-d7}, [%[din]]!            @ load din 0\n"
-
-          "vcge.f32 q8, q0, %q[vzero]             @ get mask\n"
-          "vcge.f32 q9, q1, %q[vzero]             @ get mask\n"
-          "vcge.f32 q10, q2, %q[vzero]            @ get mask\n"
-          "vcge.f32 q11, q3, %q[vzero]            @ get mask\n"
-
-          "vmul.f32   q4, q0, %q[valpha]          @ get neg data\n"
-          "vmul.f32   q5, q1, %q[valpha]          @ get neg data\n"
-          "vmul.f32   q6, q2, %q[valpha]          @ get neg data\n"
-          "vmul.f32   q7, q3, %q[valpha]          @ get neg data\n"
-
-          "vbit   q4, q0, q8                      @ bitsel, insert q0 to q4, "
-          "if q8 is 1\n"
-          "vbit   q5, q1, q9                      @ bitsel, insert q1 to q5, "
-          "if q9 is 1\n"
-          "vbit   q6, q2, q10                     @ bitsel, insert q2 to q6, "
-          "if q10 is 1\n"
-          "vbit   q7, q3, q11                     @ bitsel, insert q3 to q7, "
-          "if q11 is 1\n"
-
-          "vst1.32  {d8-d11}, [%[dout]]!          @ store result, add pointer\n"
-          "vst1.32  {d12-d15}, [%[dout]]!         @ store result, add pointer\n"
-
-          "subs %[cnt], #1                        @ loop count minus 1\n"
-          "bne    1b                              @ jump to main loop start "
-          "point\n"
-          : [dout] "+r"(ptr_out_thread),
-            [din] "+r"(ptr_in_thread),
-            [cnt] "+r"(cnt)
-          : [vzero] "w"(vzero), [valpha] "w"(valpha)
-          : "cc",
-            "memory",
-            "q0",
-            "q1",
-            "q2",
-            "q3",
-            "q4",
-            "q5",
-            "q6",
-            "q7",
-            "q8",
-            "q9",
-            "q10",
-            "q11");
-    }
-#endif
     for (int j = 0; j < neon_loop_remain; ++j) {
       ptr_out_thread[0] = ptr_in_thread[0] > 0.f
                               ? ptr_in_thread[0]
@@ -251,16 +158,12 @@ void ActClippedReLU<float>(
   for (int i = 0; i < threads; ++i) {
     const float* ptr_in_thread = din + i * nums_per_thread;
     float* ptr_out_thread = dout + i * nums_per_thread;
-#ifdef __aarch64__
     for (int num = 0; num < neon_loop_cnt; ++num) {
       float32x4_t vr0 = vld1q_f32(ptr_in_thread);
-      ptr_in_thread += 4;
-      float32x4_t vr1 = vld1q_f32(ptr_in_thread);
-      ptr_in_thread += 4;
-      float32x4_t vr2 = vld1q_f32(ptr_in_thread);
-      ptr_in_thread += 4;
-      float32x4_t vr3 = vld1q_f32(ptr_in_thread);
-      ptr_in_thread += 4;
+      float32x4_t vr1 = vld1q_f32(ptr_in_thread + 4);
+      float32x4_t vr2 = vld1q_f32(ptr_in_thread + 8);
+      float32x4_t vr3 = vld1q_f32(ptr_in_thread + 12);
+      ptr_in_thread += 16;
       float32x4_t vt0 = vmaxq_f32(vr0, vzero);
       float32x4_t vt1 = vmaxq_f32(vr1, vzero);
       float32x4_t vt2 = vmaxq_f32(vr2, vzero);
@@ -272,58 +175,11 @@ void ActClippedReLU<float>(
       float32x4_t vo3 = vminq_f32(vt3, vclip);
 
       vst1q_f32(ptr_out_thread, vo0);
-      ptr_out_thread += 4;
-      vst1q_f32(ptr_out_thread, vo1);
-      ptr_out_thread += 4;
-      vst1q_f32(ptr_out_thread, vo2);
-      ptr_out_thread += 4;
-      vst1q_f32(ptr_out_thread, vo3);
-      ptr_out_thread += 4;
+      vst1q_f32(ptr_out_thread + 4, vo1);
+      vst1q_f32(ptr_out_thread + 8, vo2);
+      vst1q_f32(ptr_out_thread + 12, vo3);
+      ptr_out_thread += 16;
     }
-#else
-    int cnt = neon_loop_cnt;
-    if (cnt > 0) {
-      asm volatile(
-          "1:                                     @ loop header\n"
-          "vld1.32  {d0-d3}, [%[din]]!            @ load din 0\n"
-          "vld1.32  {d4-d7}, [%[din]]!            @ load din 0\n"
-
-          "vmax.f32 q8, q0, %q[vzero]             @ relu\n"
-          "vmax.f32 q9, q1, %q[vzero]             @ relu\n"
-          "vmax.f32 q10, q2, %q[vzero]            @ relu\n"
-          "vmax.f32 q11, q3, %q[vzero]            @ relu\n"
-
-          "vmin.f32 q4, q8, %q[vclip]             @ clip relu\n"
-          "vmin.f32 q5, q9, %q[vclip]             @ clip relu\n"
-          "vmin.f32 q6, q10, %q[vclip]            @ clip relu\n"
-          "vmin.f32 q7, q11, %q[vclip]            @ clip relu\n"
-
-          "vst1.32  {d8-d11}, [%[dout]]!          @ store result, add pointer\n"
-          "vst1.32  {d12-d15}, [%[dout]]!         @ store result, add pointer\n"
-
-          "subs %[cnt], #1                        @ loop count minus 1\n"
-          "bne    1b                              @ jump to main loop start "
-          "point\n"
-          : [dout] "+r"(ptr_out_thread),
-            [din] "+r"(ptr_in_thread),
-            [cnt] "+r"(cnt)
-          : [vzero] "w"(vzero), [vclip] "w"(vclip)
-          : "cc",
-            "memory",
-            "q0",
-            "q1",
-            "q2",
-            "q3",
-            "q4",
-            "q5",
-            "q6",
-            "q7",
-            "q8",
-            "q9",
-            "q10",
-            "q11");
-    }
-#endif
     for (int j = 0; j < neon_loop_remain; ++j) {
       ptr_out_thread[0] = ptr_in_thread[0] > 0.f ? ptr_in_thread[0] : 0.f;
       ptr_out_thread[0] = ptr_out_thread[0] < coef ? ptr_out_thread[0] : coef;

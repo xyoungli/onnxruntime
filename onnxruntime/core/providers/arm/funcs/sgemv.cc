@@ -45,242 +45,6 @@ void SgemvT(int M,
             bool with_relu,
             const ARMExecutionProvider *ctx);
 
-#ifdef __aarch64__
-#else
-void sgemv_trans(const int M,
-                 const int N,
-                 const float *A,
-                 const float *x,
-                 float *y,
-                 bool flag_bias,
-                 const float *bias,
-                 bool flag_relu,
-                 const ARMExecutionProvider *ctx) {
-  int m_cnt8 = M >> 3;
-  int m_cnt4 = (M & 7) >> 2;
-  int m_remain = M & 7 & 3;
-  int ths = ctx->threads();
-  int valid_ths = std::min((N + 3) / 4, ths);
-  int valid_block = std::max(4, (N / valid_ths + 3) / 4 * 4);
-  valid_ths = (N + valid_block - 1) / valid_block;
-  int block_cnt = valid_block / 4;
-  float zero_buf[M];           // NOLINT
-  float y_buf[valid_ths * M];  // NOLINT
-  memset(zero_buf, 0, M * sizeof(float));
-  if (flag_bias) {
-    memcpy(y_buf, bias, M * sizeof(float));
-    memset(y_buf + M, 0, (valid_ths - 1) * M * sizeof(float));
-  } else {
-    memset(y_buf, 0, valid_ths * M * sizeof(float));
-  }
-#pragma omp parallel for
-  for (int t = 0; t < valid_ths; ++t) {
-    float *block_y = y_buf + t * M;
-    const float *block_x = x + t * valid_block;
-    const float *block_A = A + t * valid_block * M;
-    for (int i = 0; i < block_cnt; ++i) {
-      float *y_ptr = block_y;
-      const float *x_ptr = block_x + i * 4;
-      const float *in0_ptr = block_A + i * 4 * M;
-      const float *in1_ptr = in0_ptr + M;
-      const float *in2_ptr = in1_ptr + M;
-      const float *in3_ptr = in2_ptr + M;
-      int offset = t * valid_block + (i + 1) * 4 - N;
-      if (offset > 0) {
-        if (offset > 3) {
-          in0_ptr = zero_buf;
-          in1_ptr = zero_buf;
-          in2_ptr = zero_buf;
-          in3_ptr = zero_buf;
-        } else {
-          switch (offset) {
-            case 3:
-              in1_ptr = zero_buf;
-            case 2:
-              in2_ptr = zero_buf;
-            case 1:
-              in3_ptr = zero_buf;
-            default:
-              break;
-          }
-        }
-      }
-      // clang-format off
-      if (m_cnt8 > 0) {
-        int cnt8 = m_cnt8;
-        asm volatile(
-            "vld1.32  {d4-d5},  [%[x]]    \n" /* load x   to q2     */
-            "vld1.32  {d6-d9},  [%[in0]]! \n" /* load in0 to q3, q4 */
-            "vld1.32  {d10-d13},[%[in1]]! \n" /* load in1 to q5, q6 */
-            "vld1.32  {d14-d17},[%[in2]]! \n" /* load in2 to q7, q8 */
-            "vld1.32  {d18-d21},[%[in3]]! \n" /* load in3 to q9, q10*/
-            "1:\n"
-            "vld1.32  {d0-d3},  [%[y]]    \n" /*  load y to q0, q1  */
-            "vmla.f32 q0, q3,   d4[0]     \n" /*  q0 += q3 * q2[0]  */
-            "vmla.f32 q1, q4,   d4[0]     \n" /*  q1 += q4 * q2[0]  */
-            "pld  [%[in0]]                \n" /*    preload in0     */
-            "vld1.32  {d6-d9},  [%[in0]]! \n" /* load in0 to q3, q4 */
-            "vmla.f32 q0, q5,   d4[1]     \n" /*  q0 += q5 * q2[1]  */
-            "vmla.f32 q1, q6,   d4[1]     \n" /*  q1 += q6 * q2[1]  */
-            "pld  [%[in1]]                \n" /*    preload in1     */
-            "vld1.32  {d10-d13},[%[in1]]! \n" /* load in0 to q5, q6 */
-            "vmla.f32 q0, q7,   d5[0]     \n" /*  q0 += q7 * q2[2]  */
-            "vmla.f32 q1, q8,   d5[0]     \n" /*  q1 += q8 * q2[2]  */
-            "pld  [%[in2]]                \n" /*    preload in2     */
-            "vld1.32  {d14-d17},[%[in2]]! \n" /* load in0 to q7, q8 */
-            "vmla.f32 q0, q9,   d5[1]     \n" /*  q0 += q9 * q2[3]  */
-            "vmla.f32 q1, q10,  d5[1]     \n" /*  q1 += q10 * q2[3] */
-            "subs %[cnt], %[cnt], #1      \n" /*      sub cnt       */
-            "pld  [%[in3]]                \n" /*    preload in3     */
-            "vst1.32  {d0-d3},  [%[y]]!   \n" /*  store q0, q1 to y */
-            "vld1.32  {d18-d21},[%[in3]]! \n" /* load in0 to q9, q10*/
-            "pld  [%[y], #32] \n"             /*     preload y      */
-            "bne  1b  \n"                     /*  branch to label 1 */
-            "sub  %[in0], %[in0], #32     \n" /* restore in0 address */
-            "sub  %[in1], %[in1], #32     \n" /* restore in1 address */
-            "sub  %[in2], %[in2], #32     \n" /* restore in2 address */
-            "sub  %[in3], %[in3], #32     \n" /* restore in3 address */
-            : [cnt] "+r"(cnt8),
-              [in0] "+r"(in0_ptr),
-              [in1] "+r"(in1_ptr),
-              [in2] "+r"(in2_ptr),
-              [in3] "+r"(in3_ptr),
-              [y] "+r"(y_ptr)
-            : [x] "r"(x_ptr)
-            : "q0", "q1", "q2", "q3", "q4", "q5", "q6", 
-              "q7", "q8", "q9", "q10", "cc", "memory"
-        );
-      }
-      if (m_cnt4 > 0) {
-        int cnt4 = m_cnt4;
-        asm volatile(
-            "vld1.32  {d2-d3},  [%[in0]]! \n" /* load in0 to q1  */
-            "vld1.32  {d4-d5},  [%[in1]]! \n" /* load in1 to q2  */
-            "vld1.32  {d6-d7},  [%[in2]]! \n" /* load in2 to q3  */
-            "vld1.32  {d8-d9},  [%[in3]]! \n" /* load in3 to q4  */
-            "vld1.32  {d10-d11},[%[x]]    \n" /* load x   to q5  */
-            "1:\n"
-            "vld1.32  {d0-d1},  [%[y]]    \n" /*   load y to q0    */
-            "vmla.f32 q0, q1,   d10[0]    \n" /* q0 += q1 * q5[0]  */
-            "pld  [%[in0]]                \n" /*    preload in0    */
-            "vld1.32  {d2-d3},  [%[in0]]! \n" /*  load in0 to q1   */
-            "vmla.f32 q0, q2,   d10[1]    \n" /* q0 += q2 * q5[1]  */
-            "pld  [%[in1]]                \n" /*    preload in1    */
-            "vld1.32  {d4-d5},  [%[in1]]! \n" /*  load in0 to q2   */
-            "vmla.f32 q0, q3,   d11[0]    \n" /* q0 += q3 * q5[2]  */
-            "pld  [%[in2]]                \n" /*    preload in2    */
-            "vld1.32  {d6-d7},  [%[in2]]! \n" /*  load in0 to q3   */
-            "vmla.f32 q0, q4,   d11[1]    \n" /* q0 += q4 * q5[3]  */
-            "subs %[cnt], %[cnt], #1      \n" /*      sub cnt      */
-            "pld  [%[in3]]                \n" /*    preload in3    */
-            "vst1.32  {d0-d1},  [%[y]]!   \n" /*  store q0 to y    */
-            "vld1.32  {d8-d9},  [%[in3]]! \n" /*  load in0 to q4   */
-            "bne  1b  \n"                     /*  branch to label 1 */
-            "sub  %[in0], %[in0], #16     \n" /* restore in0 address*/
-            "sub  %[in1], %[in1], #16     \n" /* restore in1 address*/
-            "sub  %[in2], %[in2], #16     \n" /* restore in2 address*/
-            "sub  %[in3], %[in3], #16     \n" /* restore in3 address*/
-            : [cnt] "+r"(cnt4),
-              [in0] "+r"(in0_ptr),
-              [in1] "+r"(in1_ptr),
-              [in2] "+r"(in2_ptr),
-              [in3] "+r"(in3_ptr),
-              [y] "+r"(y_ptr)
-            : [x] "r"(x_ptr)
-            : "q0", "q1", "q2", "q3", "q4", "q5", "cc", "memory"
-        );
-      }
-      // clang-format on
-      for (int r = 0; r < m_remain; ++r) {
-        float val0 = x_ptr[0] * in0_ptr[r];
-        float val1 = x_ptr[1] * in1_ptr[r];
-        float val2 = x_ptr[2] * in2_ptr[r];
-        float val3 = x_ptr[3] * in3_ptr[r];
-        y_ptr[r] += val0 + val1 + val2 + val3;
-      }
-    }
-  }
-  //! do reduction
-  int rdc_ths = valid_ths >> 1;
-  while (rdc_ths > 0) {
-#pragma omp parallel for
-    for (int t = 0; t < rdc_ths; ++t) {
-      float *y0 = y_buf + t * M;
-      for (int i = t + rdc_ths; i < valid_ths; i += rdc_ths) {
-        float *y0_ptr = y0;
-        float *y_ptr = y_buf + i * M;
-        for (int j = 0; j < m_cnt8; ++j) {
-          float32x4_t val00 = vld1q_f32(y0_ptr + j * 8);
-          float32x4_t val01 = vld1q_f32(y0_ptr + j * 8 + 4);
-          float32x4_t val10 = vld1q_f32(y_ptr + j * 8);
-          float32x4_t val11 = vld1q_f32(y_ptr + j * 8 + 4);
-          float32x4_t val0 = vaddq_f32(val00, val10);
-          float32x4_t val1 = vaddq_f32(val01, val11);
-          vst1q_f32(y0_ptr + j * 8, val0);
-          vst1q_f32(y0_ptr + j * 8 + 4, val1);
-        }
-        y0_ptr += m_cnt8 * 8;
-        y_ptr += m_cnt8 * 8;
-        for (int j = 0; j < m_cnt4; ++j) {
-          float32x4_t val0 = vld1q_f32(y0_ptr + j * 4);
-          float32x4_t val1 = vld1q_f32(y_ptr + j * 4);
-          float32x4_t val = vaddq_f32(val0, val1);
-          vst1q_f32(y0_ptr + j * 4, val);
-        }
-        y0_ptr += m_cnt4 * 4;
-        y_ptr += m_cnt4 * 4;
-        for (int j = 0; j < m_remain; ++j) {
-          y0_ptr[j] += y_ptr[j];
-        }
-      }
-    }
-    valid_ths = rdc_ths;
-    rdc_ths = rdc_ths >> 1;
-  }
-  if (flag_relu) {
-    float *in_y = y_buf;
-    float32x4_t vzero = vdupq_n_f32(0.f);
-    if (m_cnt8 > 0) {
-      int cnt8 = m_cnt8;
-      asm volatile(
-          "vld1.32  {d0-d3},  [%[in_y]]!  \n" /* load y to q0, q1 */
-          "1:\n"
-          "vmax.f32 q2, q0,   %q[vzero]   \n" /*      q0 relu     */
-          "vld1.32  {d0-d1},  [%[in_y]]!  \n" /*   load y to q0   */
-          "vmax.f32 q3, q1,   %q[vzero]   \n" /*      q1 relu     */
-          "subs %[cnt], %[cnt], #1        \n" /*      sub cnt     */
-          "vst1.32  {d4-d7},  [%[out_y]]! \n" /* store q0, q1 to y*/
-          "vld1.32  {d2-d3},  [%[in_y]]!  \n" /*   load y to q0   */
-          "bne  1b                        \n" /* branch to label 1*/
-          "sub  %[in_y],  %[in_y],  #32   \n" /*   restore in_y   */
-          : [cnt] "+r"(cnt8), [in_y] "+r"(in_y), [out_y] "+r"(y)
-          : [vzero] "w"(vzero)
-          : "q0", "q1", "q2", "q3", "cc", "memory");
-    }
-    if (m_cnt4 > 0) {
-      int cnt4 = m_cnt4;
-      asm volatile(
-          "vld1.32  {d0-d1},  [%[in_y]]!  \n" /*  load y to q0    */
-          "1:\n"
-          "vmax.f32 q1, q0,   %q[vzero]   \n" /*      q0 relu     */
-          "vld1.32  {d0-d1},  [%[in_y]]!  \n" /*   load y to q0   */
-          "subs %[cnt], %[cnt], #1        \n" /*      sub cnt     */
-          "vst1.32  {d2-d3},  [%[out_y]]! \n" /*  store q1 to y   */
-          "bne  1b                        \n" /* branch to label 1*/
-          "sub  %[in_y],  %[in_y],  #16   \n" /*   restore in_y   */
-          : [cnt] "+r"(cnt4), [in_y] "+r"(in_y), [out_y] "+r"(y)
-          : [vzero] "w"(vzero)
-          : "q0", "q1", "cc", "memory");
-    }
-    for (int r = 0; r < m_remain; ++r) {
-      y[r] = in_y[r] > 0.f ? in_y[r] : 0.f;
-    }
-  } else {
-    memcpy(y, y_buf, M * sizeof(float));
-  }
-}
-#endif  // __aarch64__
-
 void Sgemv(bool trans,
            int M,
            int N,
@@ -575,69 +339,168 @@ void SgemvN(int M,
 #pragma omp parallel for
   for (int j = 0; j < out_cnt; j++) {
     int out_idx = j * 4;
-    float *ptr_out = data_out + out_idx;
-    const float *ptr_in = data_in;
-    const float *ptr_w0 = weights_ptr + (N * out_idx);
-    const float *ptr_w1 = ptr_w0 + N;
-    const float *ptr_w2 = ptr_w1 + N;
-    const float *ptr_w3 = ptr_w2 + N;
-    float bias0 = bias[out_idx];
-    float bias1 = bias[out_idx + 1];
-    float bias2 = bias[out_idx + 2];
-    float bias3 = bias[out_idx + 3];
-
+    float *ptr_out = y + out_idx;
+    const float *ptr_in = x;
+    const float *ptr_w0 = A + (lda * out_idx);
+    const float *ptr_w1 = ptr_w0 + lda;
+    const float *ptr_w2 = ptr_w1 + lda;
+    const float *ptr_w3 = ptr_w2 + lda;
+    const float *bias_ptr = with_bias? bias + out_idx : nullptr;
     int cnt_loop = cnt;
-    int tail_loop = tail;
-    asm volatile(SGEMV_IN_4_BIAS SGEMV_KERNEL_4 SGEMV_OUT_4_RELU
-                 : [in] "+r"(ptr_in),
-                   [w0] "+r"(ptr_w0),
-                   [w1] "+r"(ptr_w1),
-                   [w2] "+r"(ptr_w2),
-                   [w3] "+r"(ptr_w3),
-                   [cnt] "+r"(cnt_loop),
-                   [tail] "+r"(tail_loop)
-                 : [out] "r"(ptr_out),
-                   [bias0] "r"(bias0),
-                   [bias1] "r"(bias1),
-                   [bias2] "r"(bias2),
-                   [bias3] "r"(bias3)
-                 : "q0",
-                   "q1",
-                   "q2",
-                   "q3",
-                   "q4",
-                   "q5",
-                   "q6",
-                   "q7",
-                   "q8",
-                   "q9",
-                   "q10",
-                   "q11",
-                   "q12",
-                   "q13",
-                   "cc",
-                   "memory");
+    asm volatile(
+    "pld [%[in]]                    @ preload cache line, input\n"
+    "pld [%[w0]]                    @ preload cache line, weights r0\n"
+    "pld [%[w1]]                    @ preload cache line, weights r1\n"
+    "pld [%[w2]]                    @ preload cache line, weights r2\n"
+    "pld [%[w3]]                    @ preload cache line, weights r3\n"
+    "vmov.u32 q0, #0                @ set q0 to 0\n"
+    "vmov.u32 q1, #0                @ set q1 to 0\n"
+    "vmov.u32 q2, #0                @ set q2 to 0\n"
+    "vmov.u32 q3, #0                @ set q3 to 0\n"
+    "vld1.32 {d8-d11}, [%[in]]!     @ load input, q4, q5\n"
+    "pld [%[w0], #64]               @ preload cache line, weights r0\n"
+    "pld [%[w1], #64]               @ preload cache line, weights r1\n"
+    "vld1.32 {d12-d15}, [%[w0]]!    @ load weights r0, q6,q7\n"
+    "pld [%[w2], #64]               @ preload cache line, weights r2\n"
+    "pld [%[w3], #64]               @ preload cache line, weights r3\n"
+    "vld1.32 {d16-d19}, [%[w1]]!    @ load weights r1, q8,q9\n"
+    /* check main loop */
+    "cmp %[cnt], #1                 @ check whether has main loop\n"
+    "blt  0f                        @ jump to tail\n"
+    "1:                             @ main loop\n"
+    "vld1.32 {d20-d23}, [%[w2]]!    @ load weights r2, q10,q11\n"
+    "vld1.32 {d24-d27}, [%[w3]]!    @ load weights r3, q12,q13\n"
+    "vmla.f32 q0, q4, q6            @ mul add\n"
+    "vmla.f32 q1, q4, q8            @ mul add\n"
+    "vmla.f32 q2, q4, q10           @ mul add\n"
+    "vmla.f32 q3, q4, q12           @ mul add\n"
+    "vld1.32 {d8-d9}, [%[in]]!      @ load input, q4\n"
+    "subs %[cnt], #1                @ sub loop count \n"
+    "vmla.f32 q0, q5, q7            @ mul add\n"
+    "vmla.f32 q1, q5, q9            @ mul add\n"
+    "vld1.32 {d12-d15}, [%[w0]]!    @ load weights r0, q6,q7\n"
+    "vld1.32 {d16-d19}, [%[w1]]!    @ load weights r1, q8,q9\n"
+    "vmla.f32 q2, q5, q11           @ mul add\n"
+    "vmla.f32 q3, q5, q13           @ mul add\n"
+    "vld1.32 {d10-d11}, [%[in]]!    @ load input, q5\n"
+    "bne 1b                         @ jump to main loop\n"
+    "0:\n"                          /* tail */
+    "cmp %[tail], #1                @ check whether has tail\n"
+    "blt  2f                        @ jump to end\n"
+    "vmov.i32   q12,  #0\n"         /* set padding to 0 */
+    "vbif  q4, q12, %q[mask1]\n"    /* pad 0 */
+    "vbif  q5, q12, %q[mask2]\n"    /* pad 0 */
+    "vld1.32 {d20-d23}, [%[w2]]!    @ load weights r2, q10,q11\n"
+    "vbif  q6, q12, %[mask1]\n"     /* pad 0 */
+    "vbif  q7, q12, %[mask2]\n"     /* pad 0 */
+    "vbif  q8, q12, %[mask1]\n"     /* pad 0 */
+    "vbif  q9, q12, %[mask2]\n"     /* pad 0 */
+    "vbif  q10, q12, %[mask1]\n"    /* pad 0 */
+    "vbif  q11, q12, %[mask2]\n"    /* pad 0 */
+    "vmla.f32 q0, q4, q6\n"         /* mul + add*/
+    "vmov.i32   q6,  #0\n"          /* set padding to 0 */
+    "vld1.32 {d24-d27}, [%[w3]]!    @ load weights r3, q12,q13\n"
+    "vmla.f32 q1, q4, q8\n"         /* mul + add*/
+    "vmla.f32 q2, q4, q10\n"        /* mul + add*/
+    "vbif  q12, q6, %q[mask1]\n"    /* pad 0 */
+    "vbif  q13, q6, %q[mask2]\n"    /* pad 0 */
+    "vmla.f32 q0, q5, q7\n"         /* mul + add*/
+    "vmla.f32 q3, q4, q12\n"        /* mul + add*/
+    "vmla.f32 q1, q5, q9\n"         /* mul + add*/
+    "vmla.f32 q2, q5, q11\n"        /* mul + add*/
+    "vmla.f32 q3, q5, q13\n"        /* mul + add*/
+    /* pair add to final result */
+    "2:                             @ pair add \n"
+    "vpadd.f32 d8, d0, d1           @ pair add, first step\n"
+    "vpadd.f32 d9, d2, d3           @ pair add, first step\n"
+    "vpadd.f32 d10, d4, d5          @ pair add, first step\n"
+    "vpadd.f32 d11, d6, d7          @ pair add, first step\n"
+    "vpadd.f32 d0, d8, d9           @ pair add, second step\n"
+    "vpadd.f32 d1, d10, d11         @ pair add, second step\n"
+    /* deal with alpha and beta */
+    "vld1.32 {d2-d3}, [%[out]]\n"   /* load out to q0, q1 */
+    "vdup.i32 q4, %[alpha]\n"       /* alpha */
+    "vdup.i32 q5, %[beta]\n"        /* beta */
+    "vmov.i32 q2, #0\n"
+    "cmp  %[bias_ptr], 0\n"         /* check bias */
+    "beq 3f\n"
+    "vld1.32 {d4-d5}, [%[bias_ptr]]\n" /* load bias to q2*/
+    "3:\n"
+    "vmla.f32 q2, q1, q5\n"         /* y = c * beta + bias */
+    "vmla.f32 q2, q0, q4\n"         /* y = y + alpha * Ax */
+    "cmp  %[relu], 0\n"             /* check relu */
+    "beq 4f\n"
+    "vmov.i32   q6,  #0\n"          /* for relu */
+    "vmax.f32   q2, q2, q6\n"       /* relu */
+    "4:\n"                          /* save result */
+    "vst1.32 {d4-d5}, [%[out]]\n"
+     : [in] "+r"(ptr_in), [w0] "+r"(ptr_w0), [w1] "+r"(ptr_w1),
+       [w2] "+r"(ptr_w2), [w3] "+r"(ptr_w3),
+       [cnt] "+r"(cnt_loop)
+     : [out] "r"(ptr_out), [tail] "r"(tail),
+       [relu] "r"(with_relu), [bias_ptr] "r"(bias_ptr),
+       [alpha] "r"(alpha), [beta] "r"(beta),
+       [mask1] "w"(vmask1), [mask2] "w"(vmask2)
+     : "q0", "q1", "q2",
+       "q3", "q4", "q5", "q6", "q7", "q8", "q9",
+       "q10", "q11", "q12", "q13", "cc", "memory");
   }
 //! deal with remains
 #pragma omp parallel for
   for (int j = out_cnt * 4; j < M; ++j) {
-    float *ptr_out = data_out + j;
-    const float *ptr_in = data_in;
-    const float *ptr_w0 = weights_ptr + (N * j);
+    float *ptr_out = y + j;
+    float out_tmp = *ptr_out;
+    const float *ptr_in = x;
+    const float *ptr_w0 = A + (lda * j);
     int cnt_loop = cnt;
-    int tail_loop = tail;
-    float bias0 = bias[j];
-    asm volatile(SGEMV_IN_1_BIAS SGEMV_KERNEL_1 SGEMV_OUT_1_RELU
-                 : [in] "+r"(ptr_in),
-                   [w0] "+r"(ptr_w0),
-                   [cnt] "+r"(cnt_loop),
-                   [tail] "+r"(tail_loop)
-                 : [out] "r"(ptr_out), [bias0] "r"(bias0)
-                 : "q0", "q1", "q12", "q13", "q14", "q15", "cc", "memory");
+    asm volatile(
+    "pld [%[in]]                        @ preload cache line, input\n"
+    "pld [%[w0]]                        @ preload cache line, weights r0\n"
+    "vmov.u32 q0, #0                    @ set q0 to 0\n"
+    "vmov.u32 q11, #0                   @ set q11 to 0\n"
+    "vld1.32 {d24-d27}, [%[in]]!        @ load input, q12,q13\n"
+    "vld1.32 {d28-d31}, [%[w0]]!        @ load weights r0, q14, q15\n"
+    "cmp %[cnt], #1                     @ check whether has main loop\n"
+    "blt  0f                            @ jump to tail\n"
+    "1:                                 @ main loop\n"
+    "vmla.f32 q0, q12, q14              @ mul add\n"
+    "vmla.f32 q0, q13, q15              @ mul add\n"
+    "vld1.32 {d24-d27}, [%[in]]!        @ load input, q12,q13\n"
+    "vld1.32 {d28-d31}, [%[w0]]!        @ load weights r0, q14, q15\n"
+    "subs %[cnt] , #1                   @ sub loop count \n"
+    "bne 1b                             @ jump to main loop\n"
+    "0:\n"
+    "cmp %[tail], #1                    @ check whether has tail\n"
+    "blt  2f                            @ jump to end\n"
+    "vbif  q12, q11, %q[mask1]\n"       /* pad 0 */
+    "vbif  q13, q11, %q[mask2]\n"       /* pad 0 */
+    "vbif  q14, q11, %q[mask1]\n"       /* pad 0 */
+    "vbif  q15, q11, %q[mask2]\n"       /* pad 0 */
+    "vmla.f32 q0, q12, q14\n"           /* mul + add*/
+    "vmla.f32 q0, q13, q15\n"           /* mul + add*/
+    /* pair add to final result */
+    "2:                                 @ end processing\n"
+    "vpadd.f32 d2, d0, d1               @ pair add, first step\n"
+    "vpadd.f32 d0, d2, d2               @ pair add, final step\n"
+    "vst1.32 {d0[0]}, [%[out]]          @ save result\n"
+    : [in] "+r"(ptr_in), [w0] "+r"(ptr_w0), [cnt] "+r"(cnt_loop)
+    : [out] "r"(ptr_out), [tail] "r"(tail) ,
+      [mask1] "w"(vmask1), [mask2] "w"(vmask2)
+    : "q0", "q1", "q11", "q12", "q13", "q14", "q15", "cc", "memory");
+    out_tmp *= beta;
+    *ptr_out *= alpha;
+    *ptr_out += out_tmp;
+    if (with_bias) {
+      *ptr_out += bias[j];
+    }
+    if (with_relu) {
+      *ptr_out = *ptr_out > 0.f? *ptr_out : 0.f;
+    }
   }
 #endif  // __aarch64__
 }
 
+#ifdef  __aarch64__
 void SgemvT(int M,
             int N,
             float alpha,
@@ -901,144 +764,238 @@ void SgemvT(int M,
   }
 }
 
-//! define compute kernel
-#ifdef __aarch64__
-#else  // __aarch64__
+#else
 
-#define SGEMV_IN_4                                                    \
-  "pld [%[in]]                    @ preload cache line, input\n"      \
-  "pld [%[w0]]                    @ preload cache line, weights r0\n" \
-  "pld [%[w1]]                    @ preload cache line, weights r1\n" \
-  "pld [%[w2]]                    @ preload cache line, weights r2\n" \
-  "pld [%[w3]]                    @ preload cache line, weights r3\n" \
-  "vmov.u32 q0, #0                @ set q0 to 0\n"                    \
-  "vmov.u32 q1, #0                @ set q1 to 0\n"                    \
-  "vmov.u32 q2, #0                @ set q2 to 0\n"                    \
-  "vmov.u32 q3, #0                @ set q3 to 0\n"                    \
-  "pld [%[w0], #64]               @ preload cache line, weights r0\n" \
-  "pld [%[w1], #64]               @ preload cache line, weights r1\n" \
-  "pld [%[w2], #64]               @ preload cache line, weights r2\n" \
-  "pld [%[w3], #64]               @ preload cache line, weights r3\n"
+void SgemvT(int M,
+            int N,
+            float alpha,
+            const float *A,
+            int lda,
+            const float *x,
+            float beta,
+            float *y,
+            const float *bias,
+            bool with_bias,
+            bool with_relu,
+            const ARMExecutionProvider *ctx) {
+  int m_cnt8 = M >> 3;
+  int m_cnt4 = (M & 7) >> 2;
+  int m_remain = M & 7 & 3;
+  int ths = ctx->Threads();
+  int valid_ths = std::min((N + 3) / 4, ths);
+  int valid_block = std::max(4, (N / valid_ths + 3) / 4 * 4);
+  valid_ths = (N + valid_block - 1) / valid_block;
+  int block_cnt = valid_block / 4;
+  float zero_buf[M];           // NOLINT
+  float y_buf[valid_ths * M];  // NOLINT
+  memset(zero_buf, 0, M * sizeof(float));
+  memset(y_buf, 0, valid_ths * M * sizeof(float));
+#pragma omp parallel for
+  for (int t = 0; t < valid_ths; ++t) {
+    float *block_y = y_buf + t * M;
+    const float *block_x = x + t * valid_block;
+    const float *block_A = A + t * valid_block * lda;
+    for (int i = 0; i < block_cnt; ++i) {
+      float *y_ptr = block_y;
+      const float *x_ptr = block_x + i * 4;
+      const float *in0_ptr = block_A + i * 4 * lda;
+      const float *in1_ptr = in0_ptr + lda;
+      const float *in2_ptr = in1_ptr + lda;
+      const float *in3_ptr = in2_ptr + lda;
+      int offset = t * valid_block + (i + 1) * 4 - N;
+      if (offset > 0) {
+        if (offset > 3) {
+          in0_ptr = zero_buf;
+          in1_ptr = zero_buf;
+          in2_ptr = zero_buf;
+          in3_ptr = zero_buf;
+        } else {
+          switch (offset) {
+            case 3:
+              in1_ptr = zero_buf;
+            case 2:
+              in2_ptr = zero_buf;
+            case 1:
+              in3_ptr = zero_buf;
+            default:
+              break;
+          }
+        }
+      }
+      // clang-format off
+      if (m_cnt8 > 0) {
+        int cnt8 = m_cnt8;
+        asm volatile(
+        "vld1.32  {d4-d5},  [%[x]]    \n" /* load x   to q2     */
+        "vld1.32  {d6-d9},  [%[in0]]! \n" /* load in0 to q3, q4 */
+        "vld1.32  {d10-d13},[%[in1]]! \n" /* load in1 to q5, q6 */
+        "vld1.32  {d14-d17},[%[in2]]! \n" /* load in2 to q7, q8 */
+        "vld1.32  {d18-d21},[%[in3]]! \n" /* load in3 to q9, q10*/
+        "1:\n"
+        "vld1.32  {d0-d3},  [%[y]]    \n" /*  load y to q0, q1  */
+        "vmla.f32 q0, q3,   d4[0]     \n" /*  q0 += q3 * q2[0]  */
+        "vmla.f32 q1, q4,   d4[0]     \n" /*  q1 += q4 * q2[0]  */
+        "pld  [%[in0]]                \n" /*    preload in0     */
+        "vld1.32  {d6-d9},  [%[in0]]! \n" /* load in0 to q3, q4 */
+        "vmla.f32 q0, q5,   d4[1]     \n" /*  q0 += q5 * q2[1]  */
+        "vmla.f32 q1, q6,   d4[1]     \n" /*  q1 += q6 * q2[1]  */
+        "pld  [%[in1]]                \n" /*    preload in1     */
+        "vld1.32  {d10-d13},[%[in1]]! \n" /* load in0 to q5, q6 */
+        "vmla.f32 q0, q7,   d5[0]     \n" /*  q0 += q7 * q2[2]  */
+        "vmla.f32 q1, q8,   d5[0]     \n" /*  q1 += q8 * q2[2]  */
+        "pld  [%[in2]]                \n" /*    preload in2     */
+        "vld1.32  {d14-d17},[%[in2]]! \n" /* load in0 to q7, q8 */
+        "vmla.f32 q0, q9,   d5[1]     \n" /*  q0 += q9 * q2[3]  */
+        "vmla.f32 q1, q10,  d5[1]     \n" /*  q1 += q10 * q2[3] */
+        "subs %[cnt], %[cnt], #1      \n" /*      sub cnt       */
+        "pld  [%[in3]]                \n" /*    preload in3     */
+        "vst1.32  {d0-d3},  [%[y]]!   \n" /*  store q0, q1 to y */
+        "vld1.32  {d18-d21},[%[in3]]! \n" /* load in0 to q9, q10*/
+        "pld  [%[y], #32] \n"             /*     preload y      */
+        "bne  1b  \n"                     /*  branch to label 1 */
+        "sub  %[in0], %[in0], #32     \n" /* restore in0 address */
+        "sub  %[in1], %[in1], #32     \n" /* restore in1 address */
+        "sub  %[in2], %[in2], #32     \n" /* restore in2 address */
+        "sub  %[in3], %[in3], #32     \n" /* restore in3 address */
+        : [cnt] "+r"(cnt8), [in0] "+r"(in0_ptr),
+        [in1] "+r"(in1_ptr), [in2] "+r"(in2_ptr),
+        [in3] "+r"(in3_ptr), [y] "+r"(y_ptr)
+        : [x] "r"(x_ptr)
+        : "q0", "q1", "q2", "q3", "q4", "q5", "q6",
+                "q7", "q8", "q9", "q10", "cc", "memory"
+        );
+      }
+      if (m_cnt4 > 0) {
+        int cnt4 = m_cnt4;
+        asm volatile(
+        "vld1.32  {d2-d3},  [%[in0]]! \n" /* load in0 to q1  */
+        "vld1.32  {d4-d5},  [%[in1]]! \n" /* load in1 to q2  */
+        "vld1.32  {d6-d7},  [%[in2]]! \n" /* load in2 to q3  */
+        "vld1.32  {d8-d9},  [%[in3]]! \n" /* load in3 to q4  */
+        "vld1.32  {d10-d11},[%[x]]    \n" /* load x   to q5  */
+        "1:\n"
+        "vld1.32  {d0-d1},  [%[y]]    \n" /*   load y to q0    */
+        "vmla.f32 q0, q1,   d10[0]    \n" /* q0 += q1 * q5[0]  */
+        "pld  [%[in0]]                \n" /*    preload in0    */
+        "vld1.32  {d2-d3},  [%[in0]]! \n" /*  load in0 to q1   */
+        "vmla.f32 q0, q2,   d10[1]    \n" /* q0 += q2 * q5[1]  */
+        "pld  [%[in1]]                \n" /*    preload in1    */
+        "vld1.32  {d4-d5},  [%[in1]]! \n" /*  load in0 to q2   */
+        "vmla.f32 q0, q3,   d11[0]    \n" /* q0 += q3 * q5[2]  */
+        "pld  [%[in2]]                \n" /*    preload in2    */
+        "vld1.32  {d6-d7},  [%[in2]]! \n" /*  load in0 to q3   */
+        "vmla.f32 q0, q4,   d11[1]    \n" /* q0 += q4 * q5[3]  */
+        "subs %[cnt], %[cnt], #1      \n" /*      sub cnt      */
+        "pld  [%[in3]]                \n" /*    preload in3    */
+        "vst1.32  {d0-d1},  [%[y]]!   \n" /*  store q0 to y    */
+        "vld1.32  {d8-d9},  [%[in3]]! \n" /*  load in0 to q4   */
+        "bne  1b  \n"                     /*  branch to label 1 */
+        "sub  %[in0], %[in0], #16     \n" /* restore in0 address*/
+        "sub  %[in1], %[in1], #16     \n" /* restore in1 address*/
+        "sub  %[in2], %[in2], #16     \n" /* restore in2 address*/
+        "sub  %[in3], %[in3], #16     \n" /* restore in3 address*/
+        : [cnt] "+r"(cnt4), [in0] "+r"(in0_ptr),
+        [in1] "+r"(in1_ptr), [in2] "+r"(in2_ptr),
+        [in3] "+r"(in3_ptr), [y] "+r"(y_ptr)
+        : [x] "r"(x_ptr)
+        : "q0", "q1", "q2", "q3", "q4", "q5", "cc", "memory"
+        );
+      }
+      // clang-format on
+      for (int r = 0; r < m_remain; ++r) {
+        float val0 = x_ptr[0] * in0_ptr[r];
+        float val1 = x_ptr[1] * in1_ptr[r];
+        float val2 = x_ptr[2] * in2_ptr[r];
+        float val3 = x_ptr[3] * in3_ptr[r];
+        y_ptr[r] += val0 + val1 + val2 + val3;
+      }
+    }
+  }
+  //! do reduction
+  int rdc_ths = valid_ths >> 1;
+  while (rdc_ths > 0) {
+#pragma omp parallel for
+    for (int t = 0; t < rdc_ths; ++t) {
+      float *y0 = y_buf + t * M;
+      for (int i = t + rdc_ths; i < valid_ths; i += rdc_ths) {
+        float *y0_ptr = y0;
+        float *y_ptr = y_buf + i * M;
+        for (int j = 0; j < m_cnt8; ++j) {
+          float32x4_t val00 = vld1q_f32(y0_ptr + j * 8);
+          float32x4_t val01 = vld1q_f32(y0_ptr + j * 8 + 4);
+          float32x4_t val10 = vld1q_f32(y_ptr + j * 8);
+          float32x4_t val11 = vld1q_f32(y_ptr + j * 8 + 4);
+          float32x4_t val0 = vaddq_f32(val00, val10);
+          float32x4_t val1 = vaddq_f32(val01, val11);
+          vst1q_f32(y0_ptr + j * 8, val0);
+          vst1q_f32(y0_ptr + j * 8 + 4, val1);
+        }
+        y0_ptr += m_cnt8 * 8;
+        y_ptr += m_cnt8 * 8;
+        for (int j = 0; j < m_cnt4; ++j) {
+          float32x4_t val0 = vld1q_f32(y0_ptr + j * 4);
+          float32x4_t val1 = vld1q_f32(y_ptr + j * 4);
+          float32x4_t val = vaddq_f32(val0, val1);
+          vst1q_f32(y0_ptr + j * 4, val);
+        }
+        y0_ptr += m_cnt4 * 4;
+        y_ptr += m_cnt4 * 4;
+        for (int j = 0; j < m_remain; ++j) {
+          y0_ptr[j] += y_ptr[j];
+        }
+      }
+    }
+    valid_ths = rdc_ths;
+    rdc_ths = rdc_ths >> 1;
+  }
 
-#define SGEMV_IN_4_BIAS                                               \
-  "pld [%[in]]                    @ preload cache line, input\n"      \
-  "pld [%[w0]]                    @ preload cache line, weights r0\n" \
-  "pld [%[w1]]                    @ preload cache line, weights r1\n" \
-  "pld [%[w2]]                    @ preload cache line, weights r2\n" \
-  "pld [%[w3]]                    @ preload cache line, weights r3\n" \
-  "vmov.u32 q0, #0                @ set q0 to 0\n"                    \
-  "vmov.u32 q1, #0                @ set q1 to 0\n"                    \
-  "vmov.u32 q2, #0                @ set q2 to 0\n"                    \
-  "vmov.u32 q3, #0                @ set q3 to 0\n"                    \
-  "vmov s0, %[bias0]              @ set q0 to bias0\n"                \
-  "vmov s4, %[bias1]              @ set q1 to bias1\n"                \
-  "vmov s8, %[bias2]              @ set q2 to bias2\n"                \
-  "vmov s12,%[bias3]              @ set q3 to bias3\n"                \
-  "pld [%[w0], #64]               @ preload cache line, weights r0\n" \
-  "pld [%[w1], #64]               @ preload cache line, weights r1\n" \
-  "pld [%[w2], #64]               @ preload cache line, weights r2\n" \
-  "pld [%[w3], #64]               @ preload cache line, weights r3\n"
+  // deal with alpha and beta
+  auto y_buf_ptr = y_buf;
+  int cnt4 = M >> 2;
+  int remain = M & 3;
+  if (cnt4 > 0) {
+    float32x4_t valpha = vdupq_n_f32(alpha);
+    float32x4_t vbeta = vdupq_n_f32(beta);
+    float32x4_t vzero = vdupq_n_f32(0.f);
+    asm volatile(
+    "vld1.32  {d4-d5},  [%[out_y]]  \n" /*  load y to q2    */
+    "vld1.32  {d0-d1},  [%[in_y]]!  \n" /*  load y_buf to q0    */
+    "1:                             \n"
+    "vmov.i32 q1, #0                \n"
+    "cmp  %[with_bias], #0          \n" /* check bias */
+    "ble    2f                      \n" /* check bias */
+    "vld1.32  {d2-d3}, [%[bias]]!   \n" /* load bias */
+    "2:                             \n"
+    "vmla.f32 q1, q2, %q[beta]      \n" /* y = y * beta + bias */
+    "vmla.f32 q1, q0, %q[alpha]     \n" /* out * alpha */
+    "vld1.32  {d0-d1},  [%[in_y]]!  \n" /*   load y to v0   */
+    "cmp  %[relu], #0               \n" /* check relu */
+    "ble    3f                      \n" /* check relu */
+    "vmax.f32 q1, q1, %q[vzero]     \n" /* v0 relu */
+    "3:                             \n"
+    "subs %[cnt],  %[cnt], #1       \n" /*      sub cnt     */
+    "vst1.32  {d2-d3},  [%[out_y]]! \n" /*  store v1 to y   */
+    "vld1.32  {d4-d5},  [%[out_y]]  \n" /*  load y to v2    */
+    "bne  1b                        \n" /* branch to label 1*/
+    "sub  %[in_y],  %[in_y],  #16   \n" /*   restore in_y   */
+    : [cnt] "+r"(cnt4), [in_y] "+r"(y_buf_ptr),
+    [out_y] "+r"(y), [bias]"+r"(bias)
+    : [vzero] "w"(vzero), [alpha] "w"(valpha), [beta] "w"(vbeta),
+    [relu] "r" (with_relu), [with_bias] "r" (with_bias)
+    : "q0", "q1", "q2", "cc", "memory");
+  }
 
-#define SGEMV_IN_1                                                        \
-  "pld [%[in]]                        @ preload cache line, input\n"      \
-  "pld [%[w0]]                        @ preload cache line, weights r0\n" \
-  "vmov.u32 q0, #0                    @ set q0 to 0\n"
-
-#define SGEMV_IN_1_BIAS                                                   \
-  "pld [%[in]]                        @ preload cache line, input\n"      \
-  "pld [%[w0]]                        @ preload cache line, weights r0\n" \
-  "vmov.u32 q0, #0                    @ set q0 to 0\n"                    \
-  "vmov s0, %[bias0]                  @ set q0 to 0\n"
-
-#define SGEMV_KERNEL_4                                                         \
-  /* check main loop */                                                        \
-  "cmp %[cnt], #1                 @ check whether has main loop\n"             \
-  "blt  2f                        @ jump to tail\n"                            \
-  "1:                             @ main loop\n"                               \
-  "vld1.32 {d8-d11}, [%[in]]!     @ load input, q4, q5\n"                      \
-  "vld1.32 {d12-d15}, [%[w0]]!    @ load weights r0, q6,q7\n"                  \
-  "vld1.32 {d16-d19}, [%[w1]]!    @ load weights r1, q8,q9\n"                  \
-  "vld1.32 {d20-d23}, [%[w2]]!    @ load weights r2, q10,q11\n"                \
-  "vld1.32 {d24-d27}, [%[w3]]!    @ load weights r3, q12,q13\n"                \
-  "vmla.f32 q0, q4, q6            @ mul add\n"                                 \
-  "vmla.f32 q1, q4, q8            @ mul add\n"                                 \
-  "vmla.f32 q2, q4, q10           @ mul add\n"                                 \
-  "vmla.f32 q3, q4, q12           @ mul add\n"                                 \
-  "subs %[cnt], #1                @ sub loop count \n"                         \
-  "vmla.f32 q0, q5, q7            @ mul add\n"                                 \
-  "vmla.f32 q1, q5, q9            @ mul add\n"                                 \
-  "vmla.f32 q2, q5, q11           @ mul add\n"                                 \
-  "vmla.f32 q3, q5, q13           @ mul add\n"                                 \
-  "bne 1b                         @ jump to main loop\n"                       \
-  /* pair add to final result */                                               \
-  "2:                             @ pair add \n"                               \
-  "vpadd.f32 d8, d0, d1           @ pair add, first step\n"                    \
-  "vpadd.f32 d9, d2, d3           @ pair add, first step\n"                    \
-  "vpadd.f32 d10, d4, d5          @ pair add, first step\n"                    \
-  "vpadd.f32 d11, d6, d7          @ pair add, first step\n"                    \
-  "vpadd.f32 d0, d8, d9           @ pair add, second step\n"                   \
-  "vpadd.f32 d1, d10, d11         @ pair add, second step\n" /* check tails */ \
-  "cmp %[tail], #1                @ check whether has tail\n"                  \
-  "blt  4f                        @ jump to end\n"                             \
-  "3:                             @ tail loop\n"                               \
-  "vldm     %[in]!, {s16}         @ load 1 float\n"                            \
-  "vldm     %[w0]!, {s17}         @ load 1 float\n"                            \
-  "vldm     %[w1]!, {s18}         @ load 1 float\n"                            \
-  "vldm     %[w2]!, {s19}         @ load 1 float\n"                            \
-  "vldm     %[w3]!, {s20}         @ load 1 float\n"                            \
-  "vmla.f32   s0, s16, s17        @ mul + add\n"                               \
-  "vmla.f32   s1, s16, s18        @ mul + add\n"                               \
-  "vmla.f32   s2, s16, s19        @ mul + add\n"                               \
-  "vmla.f32   s3, s16, s20        @ mul + add\n"                               \
-  "subs %[tail], #1               @ sub loop count \n"                         \
-  "bne 3b                         @ jump to tail loop\n"
-
-#define SGEMV_KERNEL_1                                                         \
-  "cmp %[cnt], #1                     @ check whether has main loop\n"         \
-  "blt  2f                            @ jump to tail\n"                        \
-  "1:                                 @ main loop\n"                           \
-  "vld1.32 {d24-d27}, [%[in]]!        @ load input, q12,q13\n"                 \
-  "vld1.32 {d28-d31}, [%[w0]]!        @ load weights r0, q14, q15\n"           \
-  "vmla.f32 q0, q12, q14              @ mul add\n"                             \
-  "vmla.f32 q0, q13, q15              @ mul add\n"                             \
-  "subs %[cnt] , #1                   @ sub loop count \n"                     \
-  "bne 1b                             @ jump to main loop\n"                   \
-  "2:                                 @ end processing\n"                      \
-  "vpadd.f32 d2, d0, d1               @ pair add, first step\n"                \
-  "vpadd.f32 d0, d2, d2               @ pair add, final step\n"/*check tails*/ \
-  "cmp %[tail], #1                    @ check whether has mid cols\n"          \
-  "blt  4f                            @ jump to end\n"                         \
-  "3:                                 @ tail loop\n"                           \
-  "vldm     %[in]!, {s16}             @ load 1 float\n"                        \
-  "vldm     %[w0]!, {s17}             @ load 1 float\n"                        \
-  "vmla.f32   s0, s16, s17            @ mul + add\n"                           \
-  "subs %[tail], #1                   @ sub loop count \n"                     \
-  "bne 3b                             @ jump to tail loop\n"
-
-#define SGEMV_OUT_4                        \
-  /* end */                                \
-  "4:                             @ end\n" \
-  "vst1.32 {d0-d1}, [%[out]]      @ save result\n"
-
-#define SGEMV_OUT_4_RELU                             \
-  /* end */                                          \
-  "4:                             @ end\n"           \
-  "vmov.i32   q1, #0              @ zero for relu\n" \
-  "vmax.f32   q0, q0, q1          @ relu\n"          \
-  "vst1.32 {d0-d1}, [%[out]]      @ save result\n"
-
-#define SGEMV_OUT_1                        \
-  /* end */                                \
-  "4:                             @ end\n" \
-  "vst1.32 {d0[0]}, [%[out]]      @ save result\n"
-
-#define SGEMV_OUT_1_RELU                             \
-  /* end */                                          \
-  "4:                             @ end\n"           \
-  "vmov.i32   d1, #0              @ zero for relu\n" \
-  "vmax.f32   d0, d0, d1          @ relu\n"          \
-  "vst1.32 {d0[0]}, [%[out]]      @ save result\n"
-#endif
+  for (int r = 0; r < remain; ++r) {
+    y[r] = y_buf_ptr[r] * alpha + beta * y[r];
+    if (with_bias) {
+      y[r] += bias[r];
+    }
+    if (with_relu) {
+      y[r] = y[r] > 0.f ? y[r] : 0.f;
+    }
+  }
+}
+#endif  // __aarch64__
 
 }  // namespace funcs
 }  // namespace arm

@@ -1,6 +1,7 @@
 #include "elementwise.h"
 #include <algorithm>
 #include <arm_neon.h>
+#include "neon_math.h"
 namespace onnxruntime {
 namespace arm {
 namespace funcs {
@@ -1053,17 +1054,11 @@ void ElementwiseDiv<float>(const float* dinx,
     float32x4_t diny2 = vld1q_f32(diny_ptr + 8);
     float32x4_t diny3 = vld1q_f32(diny_ptr + 12);
 
-#ifdef __aarch64__
     dinx0 = vdivq_f32(dinx0, diny0);
     dinx1 = vdivq_f32(dinx1, diny1);
     dinx2 = vdivq_f32(dinx2, diny2);
     dinx3 = vdivq_f32(dinx3, diny3);
-#else
-    dinx0 = div_ps(dinx0, diny0);
-    dinx1 = div_ps(dinx1, diny1);
-    dinx2 = div_ps(dinx2, diny2);
-    dinx3 = div_ps(dinx3, diny3);
-#endif
+
     vst1q_f32(dout_ptr, dinx0);
     vst1q_f32(dout_ptr + 4, dinx1);
     vst1q_f32(dout_ptr + 8, dinx2);
@@ -1106,17 +1101,10 @@ void ElementwiseDivBroadcast<float>(const float* dinx,
         float32x4_t din2 = vld1q_f32(din_ptr + 8);
         float32x4_t din3 = vld1q_f32(din_ptr + 12);
 
-#ifdef __aarch64__
         din0 = vdivq_f32(din0, rb);
         din1 = vdivq_f32(din1, rb);
         din2 = vdivq_f32(din2, rb);
         din3 = vdivq_f32(din3, rb);
-#else
-        din0 = div_ps(din0, rb);
-        din1 = div_ps(din1, rb);
-        din2 = div_ps(din2, rb);
-        din3 = div_ps(din3, rb);
-#endif
 
         vst1q_f32(dout_ptr, din0);
         vst1q_f32(dout_ptr + 4, din1);
@@ -1128,13 +1116,8 @@ void ElementwiseDivBroadcast<float>(const float* dinx,
       if (remain >= 8) {
         float32x4_t din0 = vld1q_f32(din_ptr);
         float32x4_t din1 = vld1q_f32(din_ptr + 4);
-#ifdef __aarch64__
         din0 = vdivq_f32(din0, rb);
         din1 = vdivq_f32(din1, rb);
-#else
-        din0 = div_ps(din0, rb);
-        din1 = div_ps(din1, rb);
-#endif
         vst1q_f32(dout_ptr, din0);
         vst1q_f32(dout_ptr + 4, din1);
         din_ptr += 8;
@@ -1143,11 +1126,7 @@ void ElementwiseDivBroadcast<float>(const float* dinx,
       }
       if (remain >= 4) {
         float32x4_t din0 = vld1q_f32(din_ptr);
-#ifdef __aarch64__
         din0 = vdivq_f32(din0, rb);
-#else
-        din0 = div_ps(din0, rb);
-#endif
         vst1q_f32(dout_ptr, din0);
         din_ptr += 4;
         dout_ptr += 4;
@@ -1188,17 +1167,11 @@ void ElementwiseDivReLU<float>(const float* dinx,
     float32x4_t diny2 = vld1q_f32(diny_ptr + 8);
     float32x4_t diny3 = vld1q_f32(diny_ptr + 12);
 
-#ifdef __aarch64__
     dinx0 = vdivq_f32(dinx0, diny0);
     dinx1 = vdivq_f32(dinx1, diny1);
     dinx2 = vdivq_f32(dinx2, diny2);
     dinx3 = vdivq_f32(dinx3, diny3);
-#else
-    dinx0 = div_ps(dinx0, diny0);
-    dinx1 = div_ps(dinx1, diny1);
-    dinx2 = div_ps(dinx2, diny2);
-    dinx3 = div_ps(dinx3, diny3);
-#endif
+
     // relu
     dinx0 = vmaxq_f32(dinx0, vzero);
     dinx1 = vmaxq_f32(dinx1, vzero);
@@ -1248,17 +1221,11 @@ void ElementwiseDivReLUBroadcast<float>(const float* dinx,
         float32x4_t din2 = vld1q_f32(din_ptr + 8);
         float32x4_t din3 = vld1q_f32(din_ptr + 12);
 
-#ifdef __aarch64__
         din0 = vdivq_f32(din0, rb);
         din1 = vdivq_f32(din1, rb);
         din2 = vdivq_f32(din2, rb);
         din3 = vdivq_f32(din3, rb);
-#else
-        din0 = div_ps(din0, rb);
-        din1 = div_ps(din1, rb);
-        din2 = div_ps(din2, rb);
-        din3 = div_ps(din3, rb);
-#endif
+
         // relu
         din0 = vmaxq_f32(din0, vzero);
         din1 = vmaxq_f32(din1, vzero);
@@ -1275,13 +1242,8 @@ void ElementwiseDivReLUBroadcast<float>(const float* dinx,
       if (remain >= 8) {
         float32x4_t din0 = vld1q_f32(din_ptr);
         float32x4_t din1 = vld1q_f32(din_ptr + 4);
-#ifdef __aarch64__
         din0 = vdivq_f32(din0, rb);
         din1 = vdivq_f32(din1, rb);
-#else
-        din0 = div_ps(din0, rb);
-        din1 = div_ps(din1, rb);
-#endif
         // relu
         din0 = vmaxq_f32(din0, vzero);
         din1 = vmaxq_f32(din1, vzero);
@@ -1293,11 +1255,7 @@ void ElementwiseDivReLUBroadcast<float>(const float* dinx,
       }
       if (remain >= 4) {
         float32x4_t din0 = vld1q_f32(din_ptr);
-#ifdef __aarch64__
         din0 = vdivq_f32(din0, rb);
-#else
-        din0 = div_ps(din0, rb);
-#endif
         // relu
         din0 = vmaxq_f32(din0, vzero);
         vst1q_f32(dout_ptr, din0);

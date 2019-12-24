@@ -71,6 +71,14 @@ constexpr float te_sin_coeff4 = 0.023809523810f; // 1/(6*7)
 constexpr float te_sin_coeff5 = 0.013888888889f; // 1/(8*9)
 
 #ifndef DOXYGEN_SKIP_THIS
+#ifndef __aarch64__
+inline float32x4_t vdivq_f32(float32x4_t a, float32x4_t b) {
+  float32x4_t reciprocal = vrecpeq_f32(b);
+  reciprocal = vmulq_f32(vrecpsq_f32(b, reciprocal), reciprocal);
+  return vmulq_f32(a, reciprocal);
+}
+#endif
+
 inline float32x4_t vfloorq_f32(float32x4_t val) {
   static const float32x4_t CONST_1 = vdupq_n_f32(1.f);
 

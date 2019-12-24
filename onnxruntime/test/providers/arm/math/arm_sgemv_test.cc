@@ -13,6 +13,15 @@ namespace test {
 bool TestSgemv(bool tra, int m, int n, float alpha, int lda, float beta,
                bool has_bias, bool has_relu, int cls, int ths,
                int warmup_iter=0, int repeats=1, bool check_result=true) {
+
+  std::cout << "sgemv, transA: " << (tra ? "true" : "false")
+            << ", M: " << m << ", N: " << n
+            << ", alpha: " << alpha << ", lda: " << lda
+            << ", beta: " << beta
+            << ", bias: " << (has_bias ? "true" : "false")
+            << ", relu: " << (has_relu ? "true" : "false")
+            << ", cluster: " << cls << ", threads: " << ths;
+
   ARMExecutionProviderInfo info;
   info.threads = ths;
   info.mode = static_cast<PowerMode>(cls);
@@ -41,8 +50,6 @@ bool TestSgemv(bool tra, int m, int n, float alpha, int lda, float beta,
     basic_gemv(tra, m, n, alpha, da, lda, dx, 1, beta, dy_basic, 1, dbias, has_bias, has_relu);
   }
 
-  printf("finish basic sgemv\n");
-
   Timer t0;
   //! compute
   double ops = 2.0 * m * n;
@@ -57,14 +64,7 @@ bool TestSgemv(bool tra, int m, int n, float alpha, int lda, float beta,
     arm::funcs::Sgemv(tra, m, n, alpha, da, lda, dx, 1, beta, dy, 1, dbias, has_bias, has_relu, provider.get());
     t0.Stop();
   }
-  std::cout << "sgemv, transA: " << (tra ? "true" : "false")
-            << ", M: " << m << ", N: " << n
-            << ", alpha: " << alpha << ", lda: " << lda
-            << ", beta: " << beta
-            << ", bias: " << (has_bias ? "true" : "false")
-            << ", relu: " << (has_relu ? "true" : "false")
-            << ", cluster: " << cls << ", threads: " << ths
-            << ", GOPS: " << ops * 1e-9f << " GOPS" \
+  std::cout << ", GOPS: " << ops * 1e-9f << " GOPS" \
             << ", avg time: " << t0.LapTimes().Avg() << "ms"
             << ", min time: " << t0.LapTimes().Min() << "ms"
             << ", mean GOPs: " << ops * 1e-6f / t0.LapTimes().Avg() << "GOPS"
@@ -82,7 +82,7 @@ bool TestSgemv(bool tra, int m, int n, float alpha, int lda, float beta,
       compute_data_diff(dy_basic, dy, data_diff, m);
       std::cout << "basic result: \n";
       print_data(dy_basic, m, m);
-      std::cout << "saber result: \n";
+      std::cout << "arm result: \n";
       print_data(dy, m, m);
       std::cout << "diff result: \n";
       print_data(data_diff, m, m);
@@ -107,7 +107,7 @@ TEST(TestARMSgemv, Sgemv) {
                       int lda = tra ? m : n;
                       lda += lda_inc;
                       auto flag = TestSgemv(tra, m, n, alpha, lda, beta,
-                                             has_bias, has_relu, 0, th);
+                                             has_bias, has_relu, 0, th, 0);
                       if (flag) {
                         std::cout << "test m = " << m << ", n=" << n
                                   << ", bias: " << (has_bias ? "true" : "false")

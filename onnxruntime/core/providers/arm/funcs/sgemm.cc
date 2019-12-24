@@ -71,7 +71,7 @@ void Sgemm(bool transA,
     }
     return Sgemv(transA, M, K, alpha, A, lda, B, incx, beta, C, ldc, bias, is_bias, is_relu, ctx);
   }
-  int hblock = GetSgemmHblock(ctx);
+  int hblock = GetSgemmHblock(ctx, M);
   int m_roundup = hblock * ((M + hblock - 1) / hblock);
 
   auto packed_A_ptr = static_cast<float*>(

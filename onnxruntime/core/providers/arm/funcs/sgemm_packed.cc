@@ -186,7 +186,7 @@ void PrepackA(float *out,
     }
   }
 #else
-  if (ctx->arch() == kA73 || mmax <= 4) {
+  if (ctx->Arch() == kA73 || mmax <= 4) {
     if (is_trans) {
       prepackA_trans_4x8(out, in, alpha, ldin, m0, mmax, k0, kmax);
     } else {
@@ -250,7 +250,7 @@ void SgemmPrepack(bool is_transB,
                          ctx);
   }
 #else   // armv7
-  if (ctx->arch() == kA73 || M <= 4) {
+  if (ctx->Arch() == kA73 || M <= 4) {
     sgemm_prepacked_4x8(is_transB,
                         M,
                         N,
@@ -1017,21 +1017,9 @@ void prepackA_6x8(float* outptr,
             [inptr5] "+r"(inptr5),
             [outptr] "+r"(outptr)
           : [has_alpha] "r"(has_alpha), [alpha] "w"(valpha)
-          : "q0",
-            "q1",
-            "q2",
-            "q3",
-            "q4",
-            "q5",
-            "q6",
-            "q7",
-            "q8",
-            "q9",
-            "q10",
-            "q11",
-            "q15",
-            "cc",
-            "memory");
+          : "q0", "q1", "q2", "q3",
+            "q4", "q5", "q6", "q7", "q8", "q9",
+            "q10", "q11", "q15", "cc", "memory");
     }
 
     for (; x > 0; x--) {
@@ -1871,7 +1859,6 @@ void loadb(
   int x_len = nmax - n0;
   int y_len = kmax - k0;
   int right_remain = x_len - 8 * (x_len / 8);
-  int right_pad = 8 - right_remain;
 
   uint32_t* outptr_row = outptr;
   int stride_out = 8 * y_len;
@@ -2104,33 +2091,15 @@ void loadb_trans(
           "vst1.32  {d23},    [%[outptr]]!  @ write d23(q11,high),r47,r57\n"
           "vst1.32  {d31},    [%[outptr]]!  @ write d31(q15,high),r67,r77\n"
           : [inptr0] "+r"(inptr0),
-            [inptr1] "+r"(inptr1),
-            [inptr2] "+r"(inptr2),
-            [inptr3] "+r"(inptr3),
-            [inptr4] "+r"(inptr4),
-            [inptr5] "+r"(inptr5),
-            [inptr6] "+r"(inptr6),
-            [inptr7] "+r"(inptr7),
-            [outptr] "+r"(outptr)
+            [inptr1] "+r"(inptr1), [inptr2] "+r"(inptr2),
+            [inptr3] "+r"(inptr3), [inptr4] "+r"(inptr4),
+            [inptr5] "+r"(inptr5), [inptr6] "+r"(inptr6),
+            [inptr7] "+r"(inptr7), [outptr] "+r"(outptr)
           :
-          : "q0",
-            "q1",
-            "q2",
-            "q3",
-            "q4",
-            "q5",
-            "q6",
-            "q7",
-            "q8",
-            "q9",
-            "q10",
-            "q11",
-            "q12",
-            "q13",
-            "q14",
-            "q15",
-            "cc",
-            "memory");
+          : "q0", "q1", "q2", "q3",
+            "q4", "q5", "q6", "q7",
+            "q8", "q9", "q10", "q11", "q12",
+            "q13", "q14", "q15", "cc", "memory");
     }
 
     for (; x > 0; x--) {
@@ -3075,6 +3044,24 @@ void sgemm_prepacked_4x4(bool is_transB,
   }
 }
 #else  // __aarch64__
+
+struct GemmInfo{
+  float alpha;
+  float beta;
+  int M;
+  int N;
+  int K;
+  int lda;
+  int ldb;
+  int ldc;
+  bool with_bias;
+  bool with_relu;
+  const float* A;
+  const float* B;
+  float* C;
+  const float* bias;
+};
+
 /**
  * \brief gemm with ablock = 6, bblock = 8, output 6x8
  * @param A
@@ -3100,9 +3087,8 @@ void sgemm_prepacked_6x8(bool is_transB,
                          bool has_bias,
                          bool has_relu,
                          ARMExecutionProvider* ctx) {
-  size_t l2_cache = ctx->llc_size() > 0 ? ctx->llc_size() : 512 * 1024;
+  size_t l2_cache = ctx->LLCSize();
   auto* workspace = ctx->WorkspaceData<float>();
-  int threads = ctx->threads();
   //! MBLOCK * x (result) + MBLOCK * k (A) + x * k (B) = l2
   int x_block =
       (l2_cache - (MBLOCK_OTH * K)) / (sizeof(float) * (K + MBLOCK_OTH));
@@ -3125,9 +3111,21 @@ void sgemm_prepacked_6x8(bool is_transB,
 
   int has_beta = fabsf(beta) > 1e-8f ? 1 : 0;
 
+  GemmInfo info;
+  info.beta = beta;
+  info.M = M;
+  info.N = N;
+  info.K = K;
+  info.ldc = ldc;
+  info.with_bias = has_bias;
+  info.with_relu = has_relu;
+  info.A = A_packed;
+  info.C = C;
+  info.bias = bias;
+
   //! apanel is pre_compute outside gemm
-  for (unsigned int x0 = 0; x0 < N; x0 += x_block) {
-    unsigned int xmax = x0 + x_block;
+  for (int x0 = 0; x0 < N; x0 += x_block) {
+    int xmax = x0 + x_block;
     if (xmax > N) {
       xmax = N;
     }
@@ -3143,18 +3141,19 @@ void sgemm_prepacked_6x8(bool is_transB,
     } else {
       loadb(b_pannel, B, ldb, 0, K, x0, xmax);
     }
-#pragma omp parallel for num_threads(threads)
-    for (unsigned int y = 0; y < M; y += MBLOCK_OTH) {
-      unsigned int ymax = y + MBLOCK_OTH;
-      if (ymax > M) {
-        ymax = M;
+    info.B = b_pannel;
+#pragma omp parallel for default(none) shared(info, k_pre, tail_pre, has_beta, remain, flag_p_remain, bblocks, x0)
+    for (int y = 0; y < info.M; y += MBLOCK_OTH) {
+      int ymax = y + MBLOCK_OTH;
+      if (ymax > info.M) {
+        ymax = info.M;
       }
-      float* c_ptr0 = C + y * ldc + x0;
-      float* c_ptr1 = c_ptr0 + ldc;
-      float* c_ptr2 = c_ptr1 + ldc;
-      float* c_ptr3 = c_ptr2 + ldc;
-      float* c_ptr4 = c_ptr3 + ldc;
-      float* c_ptr5 = c_ptr4 + ldc;
+      float* c_ptr0 = info.C + y * info.ldc + x0;
+      float* c_ptr1 = c_ptr0 + info.ldc;
+      float* c_ptr2 = c_ptr1 + info.ldc;
+      float* c_ptr3 = c_ptr2 + info.ldc;
+      float* c_ptr4 = c_ptr3 + info.ldc;
+      float* c_ptr5 = c_ptr4 + info.ldc;
 
       float* pout0 = c_ptr0;
       float* pout1 = c_ptr1;
@@ -3164,13 +3163,13 @@ void sgemm_prepacked_6x8(bool is_transB,
       float* pout5 = c_ptr5;
 
       float bias_local[6] = {0};
-      if (has_bias) {
-        bias_local[0] = bias[y];
-        bias_local[1] = bias[y + 1];
-        bias_local[2] = bias[y + 2];
-        bias_local[3] = bias[y + 3];
-        bias_local[4] = bias[y + 4];
-        bias_local[5] = bias[y + 5];
+      if (info.with_bias) {
+        bias_local[0] = info.bias[y];
+        bias_local[1] = info.bias[y + 1];
+        bias_local[2] = info.bias[y + 2];
+        bias_local[3] = info.bias[y + 3];
+        bias_local[4] = info.bias[y + 4];
+        bias_local[5] = info.bias[y + 5];
       }
 
       float cout0[NBLOCK];
@@ -3180,8 +3179,8 @@ void sgemm_prepacked_6x8(bool is_transB,
       float cout4[NBLOCK];
       float cout5[NBLOCK];
 
-      const float* a_ptr_l = A_packed + y * K;
-      const float* b_ptr = b_pannel;
+      const float* a_ptr_l = info.A + y * info.K;
+      const float* b_ptr = info.B;
       for (int xb = 0; xb < bblocks; xb++) {
         if ((y + 5) >= ymax) {
           switch ((y + 5) - ymax) {
@@ -3227,7 +3226,6 @@ void sgemm_prepacked_6x8(bool is_transB,
         const float* a_ptr = a_ptr_l;
         int tails = tail_pre;
         int k = k_pre;
-        // clang-format off
         asm volatile(
             // sgemm 6x8
             "vld1.32	{d2-d4}, [%[bias_ptr]]      @ load bias 6 elements\n"
@@ -3499,24 +3497,16 @@ void sgemm_prepacked_6x8(bool is_transB,
             "vst1.32    {d20-d23},  [%[c_ptr3]]!    @ store r3\n"
             "vst1.32    {d24-d27},  [%[c_ptr4]]!    @ store r4\n"
             "vst1.32    {d28-d31},  [%[c_ptr5]]!    @ store r5\n"
-            : [a_ptr] "+r"(a_ptr),
-              [b_ptr] "+r"(b_ptr),
-              [c_ptr0] "+r"(c_ptr0),
-              [c_ptr1] "+r"(c_ptr1),
-              [c_ptr2] "+r"(c_ptr2),
-              [c_ptr3] "+r"(c_ptr3),
-              [c_ptr4] "+r"(c_ptr4),
-              [c_ptr5] "+r"(c_ptr5),
-              [k] "+r"(k),
-              [tails] "+r"(tails)
+            : [a_ptr] "+r"(a_ptr), [b_ptr] "+r"(b_ptr),
+              [c_ptr0] "+r"(c_ptr0), [c_ptr1] "+r"(c_ptr1),
+              [c_ptr2] "+r"(c_ptr2), [c_ptr3] "+r"(c_ptr3),
+              [c_ptr4] "+r"(c_ptr4), [c_ptr5] "+r"(c_ptr5),
+              [k] "+r"(k), [tails] "+r"(tails)
             : [bias_ptr] "r"(bias_local),
-              [relu] "r"(has_relu),
-              [beta] "r"(beta)
+              [relu] "r"(info.with_relu), [beta] "r"(info.beta)
             : "q0","q1","q2","q3","q4",
               "q5","q6","q7","q8","q9","q10","q11",
               "q12","q13","q14","q15","cc","memory");
-        // clang-format on
-
         if (flag_p_remain && (xb == bblocks - 1)) {
           for (int i = 0; i < remain; ++i) {
             *pout0++ = cout0[i];
@@ -3546,9 +3536,8 @@ void sgemm_prepacked_4x8(bool is_transB,
                          bool has_bias,
                          bool has_relu,
                          ARMExecutionProvider* ctx) {
-  size_t l2_cache = ctx->llc_size() > 0 ? ctx->llc_size() : 512 * 1024;
+  size_t l2_cache = ctx->LLCSize();
   auto* workspace = ctx->WorkspaceData<float>();
-  int threads = ctx->threads();
   //! MBLOCK * x (result) + MBLOCK * k (A) + x * k (B) = l2
   int x_block =
       (l2_cache - (MBLOCK_A73 * K)) / (sizeof(float) * (K + MBLOCK_A73));
@@ -3571,9 +3560,21 @@ void sgemm_prepacked_4x8(bool is_transB,
 
   int has_beta = fabsf(beta) > 1e-8f ? 1 : 0;
 
+  GemmInfo info;
+  info.beta = beta;
+  info.M = M;
+  info.N = N;
+  info.K = K;
+  info.ldc = ldc;
+  info.with_bias = has_bias;
+  info.with_relu = has_relu;
+  info.A = A_packed;
+  info.C = C;
+  info.bias = bias;
+
   //! apanel is pre_compute outside gemm
-  for (unsigned int x0 = 0; x0 < N; x0 += x_block) {
-    unsigned int xmax = x0 + x_block;
+  for (int x0 = 0; x0 < N; x0 += x_block) {
+    int xmax = x0 + x_block;
     if (xmax > N) {
       xmax = N;
     }
@@ -3589,11 +3590,12 @@ void sgemm_prepacked_4x8(bool is_transB,
     } else {
       loadb(b_pannel, B, ldb, 0, K, x0, xmax);
     }
-#pragma omp parallel for num_threads(threads)
-    for (unsigned int y = 0; y < M; y += MBLOCK_A73) {
-      unsigned int ymax = y + MBLOCK_A73;
-      if (ymax > M) {
-        ymax = M;
+    info.B = b_pannel;
+#pragma omp parallel for default(none) shared(info, k_pre, tail_pre, has_beta, x0, bblocks, remain, flag_p_remain)
+    for (int y = 0; y < info.M; y += MBLOCK_A73) {
+      int ymax = y + MBLOCK_A73;
+      if (ymax > info.M) {
+        ymax = info.M;
       }
 
       float cout0[NBLOCK];
@@ -3602,25 +3604,25 @@ void sgemm_prepacked_4x8(bool is_transB,
       float cout3[NBLOCK];
 
       float bias_local[4] = {0};
-      if (has_bias) {
-        bias_local[0] = bias[y];
-        bias_local[1] = bias[y + 1];
-        bias_local[2] = bias[y + 2];
-        bias_local[3] = bias[y + 3];
+      if (info.with_bias) {
+        bias_local[0] = info.bias[y];
+        bias_local[1] = info.bias[y + 1];
+        bias_local[2] = info.bias[y + 2];
+        bias_local[3] = info.bias[y + 3];
       }
 
-      float* c_ptr0 = C + y * ldc + x0;
-      float* c_ptr1 = c_ptr0 + ldc;
-      float* c_ptr2 = c_ptr1 + ldc;
-      float* c_ptr3 = c_ptr2 + ldc;
+      float* c_ptr0 = info.C + y * info.ldc + x0;
+      float* c_ptr1 = c_ptr0 + info.ldc;
+      float* c_ptr2 = c_ptr1 + info.ldc;
+      float* c_ptr3 = c_ptr2 + info.ldc;
 
       float* pout0 = c_ptr0;
       float* pout1 = c_ptr1;
       float* pout2 = c_ptr2;
       float* pout3 = c_ptr3;
 
-      const float* a_ptr_l = A_packed + y * K;
-      const float* b_ptr = b_pannel;
+      const float* a_ptr_l = info.A + y * info.K;
+      const float* b_ptr = info.B;
       for (int xb = 0; xb < bblocks; xb++) {
         if ((y + 3) >= ymax) {
           switch ((y + 3) - ymax) {
@@ -3845,17 +3847,12 @@ void sgemm_prepacked_4x8(bool is_transB,
             "vst1.32    {d20-d23},  [%[c_ptr1]]!    @ store r1\n"
             "vst1.32    {d24-d27},  [%[c_ptr2]]!    @ store r2\n"
             "vst1.32    {d28-d31},  [%[c_ptr3]]!    @ store r3\n"
-            : [a_ptr] "+r"(a_ptr),
-              [b_ptr] "+r"(b_ptr),
-              [c_ptr0] "+r"(c_ptr0),
-              [c_ptr1] "+r"(c_ptr1),
-              [c_ptr2] "+r"(c_ptr2),
-              [c_ptr3] "+r"(c_ptr3),
-              [k] "+r"(k),
-              [tails] "+r"(tails)
+            : [a_ptr] "+r"(a_ptr), [b_ptr] "+r"(b_ptr),
+              [c_ptr0] "+r"(c_ptr0), [c_ptr1] "+r"(c_ptr1),
+              [c_ptr2] "+r"(c_ptr2), [c_ptr3] "+r"(c_ptr3),
+              [k] "+r"(k), [tails] "+r"(tails)
             : [bias_ptr] "r"(bias_local),
-              [relu] "r"(has_relu),
-              [beta] "r"(beta)
+              [relu] "r"(info.with_relu), [beta] "r"(info.beta)
             : "q0","q1","q2","q3",
               "q4","q5","q6","q7","q8","q9","q10",
               "q11","q12","q13","q14","q15","cc","memory");

@@ -20,12 +20,20 @@ bool TestSgemm(bool tra, bool trb,
                bool with_bias, bool with_relu,
                int cls, int ths,
                int warmup_iter=0, int repeats=1, bool check_result=true) {
-
   ARMExecutionProviderInfo info;
   info.threads = ths;
   info.mode = static_cast<PowerMode>(cls);
   auto provider = onnxruntime::make_unique<ARMExecutionProvider>(info);
   auto alloc = provider->GetAllocator(0, OrtMemTypeDefault);
+
+  std::cout << "Sgemm , transA: " << (tra ? "true" : "false")
+            << ", transB: " << (trb ? "true" : "false")
+            << ", M: " << m << ", N: " << n << ", K: " << k
+            << ", alpha: " << alpha <<  ", beta: " << beta
+            << ", lda: " << lda << ", ldb: " << ldb << ", ldc: " << ldc
+            << ", bias: " << (with_bias ? "true" : "false")
+            << ", relu: " << (with_relu ? "true" : "false")
+            << ", power_mode: " << cls << ", threads: " << ths;
 
   int size_a = tra ? k * lda : m * lda;
   int size_b = trb ? n * ldb : k * ldb;
@@ -56,16 +64,16 @@ bool TestSgemm(bool tra, bool trb,
                beta, dc_basic, ldc,
                dbias, with_bias, with_relu);
   }
+
   Timer t0;
   //! compute
   double ops = 2.0 * m * n * k;
   //! prepack
-  int hblock = arm::funcs::GetSgemmHblock(provider.get());
+  int hblock = arm::funcs::GetSgemmHblock(provider.get(), m);
   int m_roundup = hblock * ((m + hblock - 1) / hblock);
   auto alloc_ptr = provider->GetAllocator(0, OrtMemTypeDefault);
   auto packed_A_ptr = static_cast<float*>(
           alloc_ptr->Alloc(m_roundup * k * sizeof(float)));
-
   arm::funcs::PrepackA(packed_A_ptr, da, alpha, lda, 0, m, 0, k, tra, provider.get());
   for (int j = 0; j < warmup_iter; ++j) {
     arm::funcs::SgemmPrepack(trb,
@@ -105,15 +113,7 @@ bool TestSgemm(bool tra, bool trb,
     t1.Stop();
   }
 
-  std::cout << "Sgemm , transA: " << (tra ? "true" : "false")
-            << ", transB: " << (trb ? "true" : "false")
-            << ", M: " << m << ", N: " << n << ", K: " << k
-            << ", alpha: " << alpha <<  ", beta: " << beta
-            << ", lda: " << lda << ", ldb: " << ldb << ", ldc: " << ldc
-            << ", bias: " << (with_bias ? "true" : "false")
-            << ", relu: " << (with_relu ? "true" : "false")
-            << ", power_mode: " << cls << ", threads: " << ths
-            << ", GOPS: " << ops * 1e-9f << "GOPS\n"
+  std::cout << ", GOPS: " << ops * 1e-9f << "GOPS\n"
             << "SgemmPrepack avg time: " << t0.LapTimes().Avg() << "ms"
             << ", min time: " << t0.LapTimes().Min() << "ms"
             << ", mean GOPs: " << ops * 1e-6f / t0.LapTimes().Avg() << "GOPs"
@@ -139,7 +139,7 @@ bool TestSgemm(bool tra, bool trb,
       compute_data_diff(dc_basic, dc_prepack, data_diff, size_c);
       std::cout << "basic result: \n";
       print_data(dc_basic, size_c, ldc);
-      std::cout << "saber result: \n";
+      std::cout << "arm result: \n";
       print_data(dc_prepack, size_c, ldc);
       std::cout << "diff result: \n";
       print_data(data_diff, size_c, ldc);
@@ -151,7 +151,7 @@ bool TestSgemm(bool tra, bool trb,
       compute_data_diff(dc_basic, dc, data_diff, size_c);
       std::cout << "basic result: \n";
       print_data(dc_basic, size_c, ldc);
-      std::cout << "saber result: \n";
+      std::cout << "arm result: \n";
       print_data(dc, size_c, ldc);
       std::cout << "diff result: \n";
       print_data(data_diff, size_c, ldc);

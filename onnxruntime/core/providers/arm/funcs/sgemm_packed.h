@@ -25,14 +25,19 @@ namespace funcs {
 constexpr int MBLOCK = 8;
 constexpr int NBLOCK = 12;
 constexpr int KBLOCK = 4;
-inline int GetSgemmHblock(const ARMExecutionProvider* ctx) { return MBLOCK; }
+inline int GetSgemmHblock(const ARMExecutionProvider* ctx, int M) {
+  if (M <= 4) {
+    return 4;
+  }
+  return MBLOCK;
+}
 #else
 constexpr int MBLOCK_A73 = 4;
 constexpr int MBLOCK_OTH = 6;
 constexpr int NBLOCK = 8;
 constexpr int KBLOCK = 4;
-inline int GetSgemmHblock(ARMExecutionProvider* ctx) {
-  if (ctx->arch() == kA73) {
+inline int GetSgemmHblock(ARMExecutionProvider* ctx, int M) {
+  if (ctx->Arch() == kA73 || M <= 4) {
     return MBLOCK_A73;
   } else {
     return MBLOCK_OTH;

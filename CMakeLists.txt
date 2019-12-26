@@ -7,10 +7,11 @@ cmake_minimum_required(VERSION 3.13)
 set(ANDROID_NDK "/Users/lixiaoyang/android-ndk-r17c")
 set(CMAKE_TOOLCHAIN_FILE ${ANDROID_NDK}/build/cmake/android.toolchain.cmake)
 set(ANDROID_NATIVE_API_LEVEL 25)
-set(ANDROID_TOOLCHAIN clang)
-#set(ANDROID_ABI "armeabi-v7a with NEON")
-set(ANDROID_ABI "arm64-v8a")
-
+#set(ANDROID_TOOLCHAIN gcc)
+#set(ANDROID_ABI "armeabi-v7a")
+#set(ANDROID_ARM_NEON TRUE)
+#set(ANDROID_TOOLCHAIN clang)
+#set(ANDROID_ABI "arm64-v8a")
 
 # Project
 project(onnxruntime C CXX)
@@ -63,7 +64,7 @@ option(onnxruntime_USE_NNAPI "Build with DNNLibrary for Android NNAPI support" O
 option(onnxruntime_USE_DNNL "Build with DNNL support" OFF)
 option(onnxruntime_USE_MKLML "Build DNNL with MKL-ML binary dependency" OFF)
 option(onnxruntime_USE_GEMMLOWP "Build with gemmlowp for quantized gemm" OFF)
-option(onnxruntime_USE_AUTOML "Build AutoML support" OFF)
+option(onnxruntime_USE_FEATURIZERS "Build ML Featurizers support" OFF)
 option(onnxruntime_USE_NGRAPH "Build with nGraph support" OFF)
 option(onnxruntime_USE_OPENBLAS "Use openblas" OFF)
 option(onnxruntime_DEV_MODE "Enable developer warnings and treat most of them as error." OFF)
@@ -139,18 +140,18 @@ endif()
 if(onnxruntime_ENABLE_LTO)
   #TODO: figure out why nsync doesn't work
 
-    include(CheckIPOSupported)
-    check_ipo_supported(RESULT ipo_enabled OUTPUT ipo_output)
-    if(NOT ipo_enabled)
-      message(WARNING "IPO is not supported by this compiler")
-      set(onnxruntime_ENABLE_LTO OFF)
-    endif()
-    if(UNIX)
-      set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -flto")
-      set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -flto")
-      set (CMAKE_LDFLAGS "${CMAKE_CXX_FLAGS} -flto")
-      set (CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
-    endif()
+  include(CheckIPOSupported)
+  check_ipo_supported(RESULT ipo_enabled OUTPUT ipo_output)
+  if(NOT ipo_enabled)
+    message(WARNING "IPO is not supported by this compiler")
+    set(onnxruntime_ENABLE_LTO OFF)
+  endif()
+  if(UNIX)
+    set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -flto")
+    set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -flto")
+    set (CMAKE_LDFLAGS "${CMAKE_CXX_FLAGS} -flto")
+    set (CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
+  endif()
 endif()
 
 set(REPO_ROOT ${PROJECT_SOURCE_DIR}/)
@@ -187,10 +188,10 @@ if (MSVC)
     # This is achieved by replacing msvc option /MD with /MT and /MDd with /MTd
     # https://gitlab.kitware.com/cmake/community/wikis/FAQ#how-can-i-build-my-msvc-application-with-a-static-runtime
     foreach(flag_var
-        CMAKE_CXX_FLAGS CMAKE_CXX_FLAGS_DEBUG CMAKE_CXX_FLAGS_RELEASE
-        CMAKE_CXX_FLAGS_MINSIZEREL CMAKE_CXX_FLAGS_RELWITHDEBINFO
-        CMAKE_C_FLAGS CMAKE_C_FLAGS_DEBUG CMAKE_C_FLAGS_RELEASE
-        CMAKE_C_FLAGS_MINSIZEREL CMAKE_C_FLAGS_RELWITHDEBINFO)
+      CMAKE_CXX_FLAGS CMAKE_CXX_FLAGS_DEBUG CMAKE_CXX_FLAGS_RELEASE
+      CMAKE_CXX_FLAGS_MINSIZEREL CMAKE_CXX_FLAGS_RELWITHDEBINFO
+      CMAKE_C_FLAGS CMAKE_C_FLAGS_DEBUG CMAKE_C_FLAGS_RELEASE
+      CMAKE_C_FLAGS_MINSIZEREL CMAKE_C_FLAGS_RELWITHDEBINFO)
       if(${flag_var} MATCHES "/MD")
         string(REGEX REPLACE "/MD" "/MT" ${flag_var} "${${flag_var}}")
       endif(${flag_var} MATCHES "/MD")
@@ -202,7 +203,7 @@ if (MSVC)
     set(gtest_force_shared_crt ON CACHE BOOL "Use shared (DLL) run-time lib for gtest" FORCE)
   endif()
   #Always enable exception handling, even for Windows ARM
-  SET (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHsc")  
+  SET (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHsc")
   if (NOT onnxruntime_USE_CUDA)
     SET (CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /Gw /GL")
     SET (CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} /Gw /GL")
@@ -228,17 +229,12 @@ else()
     string(APPEND CMAKE_CXX_FLAGS_RELWITHDEBINFO " -march=native -mtune=native")
     string(APPEND CMAKE_C_FLAGS_RELWITHDEBINFO " -march=native -mtune=native")
   endif()
-  if(onnxruntime_BUILD_x86)
-    set (CMAKE_SYSTEM_PROCESSOR "x86")
-    set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -msse2 -mfpmath=sse -Wno-narrowing")
-    set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -msse2 -mfpmath=sse -Wno-narrowing")
-  endif()
 endif()
 
 if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-    #For Mac compliance
-    message("Adding flags for Mac builds")
-    set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fstack-protector-strong")
+  #For Mac compliance
+  message("Adding flags for Mac builds")
+  set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fstack-protector-strong")
 endif()
 
 find_package(PNG)
@@ -355,10 +351,10 @@ include(eigen)
 set(onnxruntime_EXTERNAL_LIBRARIES onnx onnx_proto protobuf::libprotobuf re2)
 
 function(onnxruntime_add_include_to_target dst_target)
-    foreach(src_target ${ARGN})
-        target_include_directories(${dst_target} PRIVATE $<TARGET_PROPERTY:${src_target},INTERFACE_INCLUDE_DIRECTORIES>)
-        target_compile_definitions(${dst_target} PRIVATE $<TARGET_PROPERTY:${src_target},INTERFACE_COMPILE_DEFINITIONS>)
-    endforeach()
+  foreach(src_target ${ARGN})
+    target_include_directories(${dst_target} PRIVATE $<TARGET_PROPERTY:${src_target},INTERFACE_INCLUDE_DIRECTORIES>)
+    target_compile_definitions(${dst_target} PRIVATE $<TARGET_PROPERTY:${src_target},INTERFACE_COMPILE_DEFINITIONS>)
+  endforeach()
 endfunction()
 
 set(onnxruntime_EXTERNAL_DEPENDENCIES onnx_proto re2)
@@ -401,9 +397,16 @@ if (onnxruntime_USE_TVM)
   set_target_properties(tvm_runtime PROPERTIES FOLDER "External/tvm")
   set_target_properties(nnvm_compiler PROPERTIES FOLDER "External/tvm")
 
-  set(TVM_INCLUDES ${PROJECT_CMAKE}/external/tvm/include
-    ${PROJECT_CMAKE}/external/tvm/3rdparty/dmlc-core/include
-    ${PROJECT_CMAKE}/external/tvm/3rdparty/dlpack/include
+  if (onnxruntime_USE_MKLML)
+    add_dependencies(tvm project_mklml)
+    add_dependencies(tvm_topi project_mklml)
+    add_dependencies(tvm_runtime project_mklml)
+    add_dependencies(nnvm_compiler project_mklml)
+  endif()
+
+  set(TVM_INCLUDES ${PROJECT_SOURCE_DIR}/external/tvm/include
+    ${PROJECT_SOURCE_DIR}/external/tvm/3rdparty/dmlc-core/include
+    ${PROJECT_SOURCE_DIR}/external/tvm/3rdparty/dlpack/include
     $<TARGET_PROPERTY:tvm,INTERFACE_INCLUDE_DIRECTORIES>
     $<TARGET_PROPERTY:tvm_topi,INTERFACE_INCLUDE_DIRECTORIES>
     $<TARGET_PROPERTY:nnvm_compiler,INTERFACE_INCLUDE_DIRECTORIES>)
@@ -426,7 +429,7 @@ add_subdirectory(${PROJECT_CMAKE}/onnx)
 #set_target_properties(gen_onnx_proto PROPERTIES FOLDER "External/ONNX")
 # fix a warning in onnx code we can't do anything about
 if (MSVC)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DEIGEN_HAS_C99_MATH") # required to be set explicitly to enable Eigen-Unsupported SpecialFunctions
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DEIGEN_HAS_C99_MATH") # required to be set explicitly to enable Eigen-Unsupported SpecialFunctions
 endif()
 
 if (onnxruntime_RUN_ONNX_TESTS)
@@ -435,53 +438,53 @@ endif()
 
 #Adjust warning flags
 if (WIN32)
-    add_definitions(-DPLATFORM_WINDOWS -DNOGDI -DNOMINMAX -D_USE_MATH_DEFINES)
-    # parallel build
-    # These compiler opitions cannot be forwarded to NVCC, so cannot use add_compiler_options
-    string(APPEND CMAKE_CXX_FLAGS " /MP")
-    string(APPEND CMAKE_CXX_FLAGS
-      " /wd4503" # Decorated name length exceeded.
-      " /wd4127" # conditional expression is constant.
-      " /wd4146" # unary minus operator applied to unsigned type. Needed for Protobuf
+  add_definitions(-DPLATFORM_WINDOWS -DNOGDI -DNOMINMAX -D_USE_MATH_DEFINES)
+  # parallel build
+  # These compiler opitions cannot be forwarded to NVCC, so cannot use add_compiler_options
+  string(APPEND CMAKE_CXX_FLAGS " /MP")
+  string(APPEND CMAKE_CXX_FLAGS
+    " /wd4503" # Decorated name length exceeded.
+    " /wd4127" # conditional expression is constant.
+    " /wd4146" # unary minus operator applied to unsigned type. Needed for Protobuf
     )
-    if (onnxruntime_ENABLE_STATIC_ANALYSIS)
-        string(APPEND CMAKE_CXX_FLAGS
-            " /analyze:WX- "
-            # disable warning because there are many occurrences from test macros
-            " /wd6326 " # potential comparison of a constant with another constant
-        )
-    endif()
+  if (onnxruntime_ENABLE_STATIC_ANALYSIS)
+    string(APPEND CMAKE_CXX_FLAGS
+      " /analyze:WX- "
+      # disable warning because there are many occurrences from test macros
+      " /wd6326 " # potential comparison of a constant with another constant
+      )
+  endif()
 
-    # set compile warning level to 3 on CUDA build but 4 on CPU-only build
-    if(onnxruntime_USE_CUDA)
-        #CMake hardcoded /W3 in its 'Windows-NVIDIA-CUDA.cmake'. We'd better keep consistent with it.
-        #Change it to /W4 will result build failure
-        string(APPEND CMAKE_CXX_FLAGS " /W3")
-    else()
-        string(APPEND CMAKE_CXX_FLAGS " /W4")
-    endif()
+  # set compile warning level to 3 on CUDA build but 4 on CPU-only build
+  if(onnxruntime_USE_CUDA)
+    #CMake hardcoded /W3 in its 'Windows-NVIDIA-CUDA.cmake'. We'd better keep consistent with it.
+    #Change it to /W4 will result build failure
+    string(APPEND CMAKE_CXX_FLAGS " /W3")
+  else()
+    string(APPEND CMAKE_CXX_FLAGS " /W4")
+  endif()
 
-    # treat warning as error only on x64 platform.
-    # For x86 and cross-compiled ARM64 binaries, there are too many warnings to fix, hence ignore warnings for now
-    if (CMAKE_SIZEOF_VOID_P EQUAL 8 AND onnxruntime_DEV_MODE AND NOT CMAKE_CROSSCOMPILING)
-      # treat warnings as errors
-      string(APPEND CMAKE_CXX_FLAGS " /WX")
-      foreach(type EXE STATIC SHARED)
-        set(CMAKE_${type}_LINKER_FLAGS "${CMAKE_${type}_LINKER_FLAGS} /WX")
-      endforeach()
-    endif()
+  # treat warning as error only on x64 platform.
+  # For x86 and cross-compiled ARM64 binaries, there are too many warnings to fix, hence ignore warnings for now
+  if (CMAKE_SIZEOF_VOID_P EQUAL 8 AND onnxruntime_DEV_MODE AND NOT CMAKE_CROSSCOMPILING)
+    # treat warnings as errors
+    string(APPEND CMAKE_CXX_FLAGS " /WX")
+    foreach(type EXE STATIC SHARED)
+      set(CMAKE_${type}_LINKER_FLAGS "${CMAKE_${type}_LINKER_FLAGS} /WX")
+    endforeach()
+  endif()
 
-    # set linker flags to minimize the binary size.
-    if (MSVC)
-      foreach(type EXE SHARED)
-        set(CMAKE_${type}_LINKER_FLAGS_RELWITHDEBINFO "${CMAKE_${type}_LINKER_FLAGS_RELWITHDEBINFO} /OPT:REF,ICF,LBR")
-        set(CMAKE_${type}_LINKER_FLAGS_RELWITHDEBINFO "${CMAKE_${type}_LINKER_FLAGS_RELWITHDEBINFO} /INCREMENTAL:NO")
-        if (NOT onnxruntime_USE_CUDA)
-          set(CMAKE_${type}_LINKER_FLAGS_RELEASE "${CMAKE_${type}_LINKER_FLAGS_RELEASE} /LTCG")
-          set(CMAKE_${type}_LINKER_FLAGS_RELWITHDEBINFO "${CMAKE_${type}_LINKER_FLAGS_RELWITHDEBINFO} /LTCG")
-        endif()
-      endforeach()
-    endif()
+  # set linker flags to minimize the binary size.
+  if (MSVC)
+    foreach(type EXE SHARED)
+      set(CMAKE_${type}_LINKER_FLAGS_RELWITHDEBINFO "${CMAKE_${type}_LINKER_FLAGS_RELWITHDEBINFO} /OPT:REF,ICF,LBR")
+      set(CMAKE_${type}_LINKER_FLAGS_RELWITHDEBINFO "${CMAKE_${type}_LINKER_FLAGS_RELWITHDEBINFO} /INCREMENTAL:NO")
+      if (NOT onnxruntime_USE_CUDA)
+        set(CMAKE_${type}_LINKER_FLAGS_RELEASE "${CMAKE_${type}_LINKER_FLAGS_RELEASE} /LTCG")
+        set(CMAKE_${type}_LINKER_FLAGS_RELWITHDEBINFO "${CMAKE_${type}_LINKER_FLAGS_RELWITHDEBINFO} /LTCG")
+      endif()
+    endforeach()
+  endif()
 else()
   add_definitions(-DPLATFORM_POSIX)
   # Enable warning and enable space optimization in Linux
@@ -584,29 +587,29 @@ if(onnxruntime_USE_OPENVINO)
 
   add_definitions(-DUSE_OPENVINO=1)
 
-	if(onnxruntime_USE_OPENVINO_MYRIAD)
-		add_definitions(-DOPENVINO_CONFIG_MYRIAD=1)
-	endif()
+  if(onnxruntime_USE_OPENVINO_MYRIAD)
+    add_definitions(-DOPENVINO_CONFIG_MYRIAD=1)
+  endif()
 
-	if(onnxruntime_USE_OPENVINO_GPU_FP32)
-		add_definitions(-DOPENVINO_CONFIG_GPU_FP32=1)
-	endif()
+  if(onnxruntime_USE_OPENVINO_GPU_FP32)
+    add_definitions(-DOPENVINO_CONFIG_GPU_FP32=1)
+  endif()
 
-	if(onnxruntime_USE_OPENVINO_GPU_FP16)
-		add_definitions(-DOPENVINO_CONFIG_GPU_FP16=1)
-	endif()
+  if(onnxruntime_USE_OPENVINO_GPU_FP16)
+    add_definitions(-DOPENVINO_CONFIG_GPU_FP16=1)
+  endif()
 
-	if(onnxruntime_USE_OPENVINO_CPU_FP32)
-		add_definitions(-DOPENVINO_CONFIG_CPU_FP32=1)
-	endif()
+  if(onnxruntime_USE_OPENVINO_CPU_FP32)
+    add_definitions(-DOPENVINO_CONFIG_CPU_FP32=1)
+  endif()
 
-	if(onnxruntime_USE_OPENVINO_VAD_M)
-		add_definitions(-DOPENVINO_CONFIG_VAD_M=1)
-    endif()
+  if(onnxruntime_USE_OPENVINO_VAD_M)
+    add_definitions(-DOPENVINO_CONFIG_VAD_M=1)
+  endif()
 
-	if(onnxruntime_USE_OPENVINO_VAD_F)
-		add_definitions(-DOPENVINO_CONFIG_VAD_F=1)
-	endif()
+  if(onnxruntime_USE_OPENVINO_VAD_F)
+    add_definitions(-DOPENVINO_CONFIG_VAD_F=1)
+  endif()
 
 endif()
 
@@ -642,8 +645,8 @@ if (onnxruntime_USE_CUDA)
 
     file(GLOB cuda_dll_paths "${onnxruntime_CUDA_HOME}/bin/cublas64_*" "${onnxruntime_CUDA_HOME}/bin/cudart64_*")
     foreach(cuda_dll_path ${cuda_dll_paths})
-        get_filename_component(cuda_dll_file_name ${cuda_dll_path} NAME)
-        set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} /DELAYLOAD:${cuda_dll_file_name}")
+      get_filename_component(cuda_dll_file_name ${cuda_dll_path} NAME)
+      set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} /DELAYLOAD:${cuda_dll_file_name}")
     endforeach(cuda_dll_path)
 
     set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} /DELAYLOAD:cudnn64_7.dll")
@@ -719,8 +722,8 @@ include(${PROJECT_CMAKE}/onnxruntime_optimizer.cmake)
 include(${PROJECT_CMAKE}/onnxruntime_session.cmake)
 include(${PROJECT_CMAKE}/onnxruntime_mlas.cmake)
 
-if(onnxruntime_USE_AUTOML)
-  add_definitions(-DMICROSOFT_AUTOML)
+if(onnxruntime_USE_FEATURIZERS)
+  add_definitions(-DML_FEATURIZERS)
   # Fetch and build featurizers
   include(external/featurizers.cmake)
 endif()
@@ -782,7 +785,8 @@ endif()
 
 if (onnxruntime_BUILD_CSHARP)
   message(STATUS "CSharp Build is enabled")
-#  set_property(GLOBAL PROPERTY VS_DOTNET_TARGET_FRAMEWORK_VERSION "netstandard2.0")
+  #  set_property(GLOBAL PROPERTY VS_DOTNET_TARGET_FRAMEWORK_VERSION "netstandard2.0")
   include(onnxruntime_csharp.cmake)
 endif()
+
 

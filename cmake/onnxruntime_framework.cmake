@@ -29,3 +29,11 @@ if (WIN32)
     # Add Code Analysis properties to enable C++ Core checks. Have to do it via a props file include.
     set_target_properties(onnxruntime_framework PROPERTIES VS_USER_PROPS ${PROJECT_SOURCE_DIR}/ConfigureVisualStudioCodeAnalysis.props)
 endif()
+
+if (${CMAKE_BUILD_TYPE} STREQUAL "Release" OR ${CMAKE_BUILD_TYPE} STREQUAL "MinSizeRel")
+  add_custom_command(TARGET onnxruntime_framework POST_BUILD
+    COMMAND "${CMAKE_STRIP}" -g -S -d --strip-debug --verbose
+    "libonnxruntime_framework.a"
+    COMMENT "Strip debug symbols done on final static binary.")
+endif()
+

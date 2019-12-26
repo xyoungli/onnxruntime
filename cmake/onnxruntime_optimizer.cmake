@@ -15,3 +15,10 @@ onnxruntime_add_include_to_target(onnxruntime_optimizer onnxruntime_common onnxr
 target_include_directories(onnxruntime_optimizer PRIVATE ${ONNXRUNTIME_ROOT})
 add_dependencies(onnxruntime_optimizer ${onnxruntime_EXTERNAL_DEPENDENCIES})
 set_target_properties(onnxruntime_optimizer PROPERTIES FOLDER "ONNXRuntime")
+
+if (${CMAKE_BUILD_TYPE} STREQUAL "Release" OR ${CMAKE_BUILD_TYPE} STREQUAL "MinSizeRel")
+  add_custom_command(TARGET onnxruntime_optimizer POST_BUILD
+    COMMAND "${CMAKE_STRIP}" -g -S -d --strip-debug --verbose
+    "libonnxruntime_optimizer.a"
+    COMMENT "Strip debug symbols done on final static binary.")
+endif()

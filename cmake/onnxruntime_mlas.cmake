@@ -260,3 +260,9 @@ endif()
 add_library(onnxruntime_mlas STATIC ${mlas_common_srcs} ${mlas_platform_srcs})
 target_include_directories(onnxruntime_mlas PRIVATE ${ONNXRUNTIME_ROOT}/core/mlas/inc ${ONNXRUNTIME_ROOT}/core/mlas/lib ${ONNXRUNTIME_ROOT}/core/mlas/lib/amd64 ${eigen_INCLUDE_DIRS})
 set_target_properties(onnxruntime_mlas PROPERTIES FOLDER "ONNXRuntime")
+if (${CMAKE_BUILD_TYPE} STREQUAL "Release" OR ${CMAKE_BUILD_TYPE} STREQUAL "MinSizeRel")
+  add_custom_command(TARGET onnxruntime_mlas POST_BUILD
+    COMMAND "${CMAKE_STRIP}" -g -S -d --strip-debug --verbose
+    "libonnxruntime_mlas.a"
+    COMMENT "Strip debug symbols done on final static binary.")
+endif()

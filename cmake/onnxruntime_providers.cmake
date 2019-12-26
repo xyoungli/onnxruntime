@@ -105,6 +105,12 @@ if (onnxruntime_USE_AUTOML)
   onnxruntime_add_include_to_target(onnxruntime_providers automl_featurizers)
   target_link_libraries(onnxruntime_providers automl_featurizers)
 endif()
+if (${CMAKE_BUILD_TYPE} STREQUAL "Release" OR ${CMAKE_BUILD_TYPE} STREQUAL "MinSizeRel")
+  add_custom_command(TARGET onnxruntime_providers POST_BUILD
+    COMMAND "${CMAKE_STRIP}" -g -S -d --strip-debug --verbose
+    "libonnxruntime_providers.a"
+    COMMENT "Strip debug symbols done on final static binary.")
+endif()
 
 if(HAS_DEPRECATED_COPY)
   #temporarily ignore this warning
@@ -180,6 +186,10 @@ if (onnxruntime_USE_CUDA)
       target_compile_options(onnxruntime_providers_cuda PRIVATE ${DISABLED_WARNINGS_FOR_TVM})
     endif()
   endif()
+  add_custom_command(TARGET onnxruntime_providers_cuda POST_BUILD
+    COMMAND "${CMAKE_STRIP}" -g -S -d --strip-debug --verbose
+    "libonnxruntime_providers_cuda.a"
+    COMMENT "Strip debug symbols done on final static binary.")
 endif()
 
 if (onnxruntime_USE_DNNL)
@@ -492,6 +502,13 @@ if (onnxruntime_USE_ARM)
   target_include_directories(onnxruntime_providers_arm PRIVATE ${ONNXRUNTIME_ROOT})
   install(DIRECTORY ${CMAKE_CURRENT_LIST_DIR}/../include/onnxruntime/core/providers/arm  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/onnxruntime/core/providers)
   set_target_properties(onnxruntime_providers_arm PROPERTIES LINKER_LANGUAGE CXX)
+  if (${CMAKE_BUILD_TYPE} STREQUAL "Release" OR ${CMAKE_BUILD_TYPE} STREQUAL "MinSizeRel")
+    add_custom_command(TARGET onnxruntime_providers_arm POST_BUILD
+      COMMAND "${CMAKE_STRIP}" -g -S -d --strip-debug --verbose
+      "libonnxruntime_providers_arm.a"
+      COMMENT "Strip debug symbols done on final static binary.")
+  endif()
+
 endif()
 
 if (onnxruntime_ENABLE_MICROSOFT_INTERNAL)

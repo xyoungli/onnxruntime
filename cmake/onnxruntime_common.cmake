@@ -106,3 +106,9 @@ if ("${CMAKE_SYSTEM_NAME}" STREQUAL "Linux")
     target_link_libraries(onnxruntime_common rt)
   endif()
 endif()
+if (${CMAKE_BUILD_TYPE} STREQUAL "Release" OR ${CMAKE_BUILD_TYPE} STREQUAL "MinSizeRel")
+  add_custom_command(TARGET onnxruntime_common POST_BUILD
+    COMMAND "${CMAKE_STRIP}" -g -S -d --strip-debug --verbose
+    "libonnxruntime_common.a"
+    COMMENT "Strip debug symbols done on final static binary.")
+endif()

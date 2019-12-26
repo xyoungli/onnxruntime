@@ -125,12 +125,12 @@ typedef enum OrtErrorCode {
   ORT_EP_FAIL,
 } OrtErrorCode;
 
-enum PowerMode {
+typedef enum {
   ARM_POWER_NO_BIND=0,
   ARM_POWER_HIGH=1,
   ARM_POWER_LOW=2,
   ARM_POWER_FULL=3
-};
+} PowerMode;
 
 // __VA_ARGS__ on Windows and Linux are different
 #define ORT_API(RETURN_TYPE, NAME, ...) \

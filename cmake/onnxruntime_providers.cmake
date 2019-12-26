@@ -486,6 +486,10 @@ endif()
 
 if (onnxruntime_USE_ARM)
   add_definitions(-DUSE_ARM=1)
+  if (onnxruntime_USE_ARM_DOTPROD)
+    add_definitions(-DUSE_ARM_DOTPROD=1)
+  endif()
+  add_definitions(-DUSE_ARM=1)
   file(GLOB_RECURSE onnxruntime_providers_arm_cc_srcs
     "${ONNXRUNTIME_ROOT}/core/providers/arm/*.h"
     "${ONNXRUNTIME_ROOT}/core/providers/arm/*.cc"

@@ -39,18 +39,41 @@ bool TestSgemm(bool tra, bool trb,
   int size_b = trb ? n * ldb : k * ldb;
   int size_c = m * ldc;
 
-  auto da = static_cast<float *>(alloc->Alloc(size_a * sizeof(float)));
-  auto db = static_cast<float *>(alloc->Alloc(size_b * sizeof(float)));
-  auto dbias = static_cast<float *>(alloc->Alloc(m * sizeof(float)));
-  auto dc = static_cast<float *>(alloc->Alloc(size_c * sizeof(float)));
-  auto dc_prepack = static_cast<float *>(alloc->Alloc(size_c * sizeof(float)));
-  auto dc_basic = static_cast<float *>(alloc->Alloc(size_c * sizeof(float)));
-  auto dc_backup = static_cast<float *>(alloc->Alloc(size_c * sizeof(float)));
+  Buffer ta(alloc);
+  Buffer ta_pack(alloc);
+  Buffer tb(alloc);
+  Buffer tbias(alloc);
+
+  Buffer tc(alloc);
+  Buffer tc_prepack(alloc);
+
+  Buffer tc_basic(alloc);
+  Buffer tc_basic_backup(alloc);
+
+  ta.ReAlloc(size_a * sizeof(float));
+  tb.ReAlloc(size_b * sizeof(float));
+  tbias.ReAlloc(m * sizeof(float));
+
+  tc.ReAlloc(size_c * sizeof(float));
+  tc_prepack.ReAlloc(size_c * sizeof(float));
+
+  tc_basic.ReAlloc(size_c * sizeof(float));
+  tc_basic_backup.ReAlloc(size_c * sizeof(float));
+
+  auto da = ta.MutableData<float>();
+  auto db = tb.MutableData<float>();
+  auto dbias = with_bias? tbias.MutableData<float>() : nullptr;
+  auto dc = tc.MutableData<float>();
+  auto dc_prepack = tc_prepack.MutableData<float>();
+  auto dc_basic = tc_basic.MutableData<float>();
+  auto dc_backup = tc_basic_backup.MutableData<float>();
 
   fill_data_rand(da, -1.f, 1.f, size_a);
   fill_data_rand(db, -1.f, 1.f, size_b);
-  fill_data_rand(dbias, -1.f, 1.f, m);
   fill_data_rand(dc, -1.f, 1.f, size_c);
+  if (with_bias) {
+    fill_data_rand(dbias, -1.f, 1.f, m);
+  }
 
   memcpy(dc_prepack, dc, sizeof(float) * size_c);
   memcpy(dc_basic, dc, sizeof(float) * size_c);
@@ -71,9 +94,8 @@ bool TestSgemm(bool tra, bool trb,
   //! prepack
   int hblock = arm::funcs::GetSgemmHblock(provider.get(), m);
   int m_roundup = hblock * ((m + hblock - 1) / hblock);
-  auto alloc_ptr = provider->GetAllocator(0, OrtMemTypeDefault);
-  auto packed_A_ptr = static_cast<float*>(
-          alloc_ptr->Alloc(m_roundup * k * sizeof(float)));
+  ta_pack.ReAlloc(m_roundup * k * sizeof(float));
+  auto packed_A_ptr = ta_pack.MutableData<float>();
   arm::funcs::PrepackA(packed_A_ptr, da, alpha, lda, 0, m, 0, k, tra, provider.get());
   for (int j = 0; j < warmup_iter; ++j) {
     arm::funcs::SgemmPrepack(trb,
@@ -123,50 +145,17 @@ bool TestSgemm(bool tra, bool trb,
             << ", mean GOPs: " << ops * 1e-6f / t1.LapTimes().Avg() << "GOPs"
             << ", max GOPs: " << ops * 1e-6f / t1.LapTimes().Min() << " GOPs\n";
 
-  bool passed = true;
   if (check_result) {
-    double max_ratio_prepack = 0;
-    double max_diff_prepack = 0;
-    double max_ratio = 0;
-    double max_diff = 0;
-    check_precision(dc_basic, dc_prepack, max_ratio_prepack, max_diff_prepack, size_c);
-    check_precision(dc_basic, dc, max_ratio, max_diff, size_c);
-    std::cout << "compare result:\n"
-              << "prepack sgemm: max diff: " << max_diff_prepack << ", max ratio: " << max_ratio_prepack << "\n"
-              << "sgemm: max_diff: " << max_diff << ", max_ratio: " << max_ratio << std::endl;
-    if (std::abs(max_ratio_prepack) > 1e-4f && std::abs(max_diff_prepack) > 5e-5f) {
-      auto data_diff = static_cast<float *>(alloc->Alloc(size_c * sizeof(float)));
-      compute_data_diff(dc_basic, dc_prepack, data_diff, size_c);
-      std::cout << "basic result: \n";
-      print_data(dc_basic, size_c, ldc);
-      std::cout << "arm result: \n";
-      print_data(dc_prepack, size_c, ldc);
-      std::cout << "diff result: \n";
-      print_data(data_diff, size_c, ldc);
-      alloc_ptr->Free(data_diff);
-      passed = false;
+    if (!CheckFp32(dc_basic, dc_prepack, size_c, ldc)) {
+      std::cout << "check prepacked sgemm failed\n";
+      return false;
     }
-    if (std::abs(max_ratio) > 1e-4f && std::abs(max_diff) > 5e-5f) {
-      auto data_diff = static_cast<float *>(alloc->Alloc(size_c * sizeof(float)));
-      compute_data_diff(dc_basic, dc, data_diff, size_c);
-      std::cout << "basic result: \n";
-      print_data(dc_basic, size_c, ldc);
-      std::cout << "arm result: \n";
-      print_data(dc, size_c, ldc);
-      std::cout << "diff result: \n";
-      print_data(data_diff, size_c, ldc);
-      alloc_ptr->Free(data_diff);
-      passed = false;
+    if (!CheckFp32(dc_basic, dc, size_c, ldc)) {
+      std::cout << "check sgemm failed\n";
+      return false;
     }
   }
-  alloc_ptr->Free(da);
-  alloc_ptr->Free(db);
-  alloc_ptr->Free(dbias);
-  alloc_ptr->Free(dc);
-  alloc_ptr->Free(dc_prepack);
-  alloc_ptr->Free(dc_basic);
-  alloc_ptr->Free(dc_backup);
-  return passed;
+  return true;
 }
 
 TEST(TestSgemm, TestSgemmPrecisionFull) {

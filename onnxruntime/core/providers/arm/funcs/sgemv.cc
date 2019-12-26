@@ -280,7 +280,7 @@ void SgemvN(int M,
     const float *ptr_in = x;
     const float *ptr_w0 = A + (lda * j);
     int cnt_loop = cnt;
-    float bias0 = bias[j];
+    float bias0 = with_bias? bias[j] : 0.f;
     asm volatile(
     "prfm  pldl1keep, [%[in]]   \n" /* preload din */
     "prfm  pldl1keep, [%[w0]]   \n" /* preload w0 */
@@ -315,21 +315,18 @@ void SgemvN(int M,
     "fmov s1, %w[alpha]         \n"
     "fmov s2, %w[beta]          \n"
     "ldr    s3, [%[out]]        \n" /* load out, 1 float */
-    "movi   d4, #0              \n"
-    "cbz  %w[bias], 3f          \n" /* check bias */
     "fmov   s4,  %w[bias0]      \n" /* set out0 = bias0 */
-    "3:                         \n"
     "fmadd s5, s2, s3, s4       \n" /* y = c * beta + bias */
     "fmadd s6, s0, s1, s5       \n" /* y = alpha * Ax + y */
-    "cbz  %w[relu], 4f          \n" /* check relu */
+    "cbz  %w[relu], 3f          \n" /* check relu */
     "movi   d4, #0              \n" /* zero data for relu */
     "fmax   s6, s6, s4          \n" /* relu */
-    "4:                         \n" /* end */
+    "3:                         \n" /* end */
     "str s6, [%[out]]           \n" /* save result */
     : [in] "+r"(ptr_in), [w0] "+r"(ptr_w0),
     [cnt] "+r"(cnt_loop)
     : [out] "r"(ptr_out), [bias0] "r"(bias0),
-    [bias] "r"(with_bias), [relu] "r"(with_relu),
+    [relu] "r"(with_relu),
     [alpha] "r"(alpha), [beta] "r"(beta), [tail] "r"(tail),
     [mask1]"w"(vmask1), [mask2]"w"(vmask2)
     : "v0", "v1", "v8", "v9", "v10", "v11", "v16", "v17", "v31", "cc", "memory");

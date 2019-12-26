@@ -89,3 +89,56 @@ inline void print_data(const int8_t* in, size_t size, size_t stride) {
   }
   printf("\n");
 }
+
+bool CheckFp32(const float* basic, const float* result, size_t size, size_t ldc) {
+  double max_ratio = 0;
+  double max_diff = 0;
+  check_precision(basic, result, max_ratio, max_diff, size);
+  std::cout << "compare fp32 result: max diff: " << max_diff << ", max ratio: " << max_ratio << std::endl;
+  if (std::abs(max_ratio) > 1e-4f && std::abs(max_diff) > 5e-5f) {
+    auto data_diff = static_cast<float *>(malloc(size * sizeof(float)));
+    compute_data_diff(basic, result, data_diff, size);
+    std::cout << "basic result fp32: \n";
+    print_data(basic, size, ldc);
+    std::cout << "arm result fp32: \n";
+    print_data(result, size, ldc);
+    std::cout << "diff result: \n";
+    print_data(data_diff, size, ldc);
+    free(data_diff);
+    return false;
+  }
+  return true;
+}
+
+bool CheckInt8(const int8_t* basic, const int8_t* result, size_t size, size_t ldc, float thresh, int max_num) {
+  double max_ratio = 0;
+  double max_diff = 0;
+  check_precision(basic, result, max_ratio, max_diff, size);
+  std::cout << "compare int8 result: max diff: " << max_diff << ", max ratio: " << max_ratio << std::endl;
+  if (std::abs(max_ratio) > 1e-4f ) {
+    auto data_diff = static_cast<int8_t*>(malloc(size * sizeof(int8_t)));
+    compute_data_diff(basic, result, data_diff, size);
+    float count = 0;
+    bool check = true;
+    for (int i = 0; i < size; ++i) {
+      if (abs(data_diff[i]) > 1) {
+        check = false;
+        break;
+      }
+      if (data_diff[i] != 0) {
+        count += 1;
+      }
+    }
+    check = check && count < std::max(max_num, static_cast<int>(thresh * size));
+    if (!check) {
+      std::cout << "int8 basic result\n";
+      print_data(basic, size, ldc);
+      std::cout << "int8 arm result\n";
+      print_data(result, size, ldc);
+      std::cout << "int8 diff tensor\n";
+      print_data(data_diff, size, ldc);
+      return false;
+    }
+  }
+  return true;
+}

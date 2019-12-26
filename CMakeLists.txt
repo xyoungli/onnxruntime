@@ -11,7 +11,7 @@ set(ANDROID_NATIVE_API_LEVEL 25)
 #set(ANDROID_ABI "armeabi-v7a")
 #set(ANDROID_ARM_NEON TRUE)
 #set(ANDROID_TOOLCHAIN clang)
-#set(ANDROID_ABI "arm64-v8a")
+set(ANDROID_ABI "arm64-v8a")
 
 # Project
 project(onnxruntime C CXX)
@@ -95,6 +95,7 @@ option(onnxruntime_USE_ACL "Build with ACL support" OFF)
 option(onnxruntime_ENABLE_INSTRUMENT "Enable Instrument with Event Tracing for Windows (ETW)" OFF)
 option(onnxruntime_USE_TELEMETRY "Build with Telemetry" OFF)
 option(onnxruntime_USE_ARM "Build with ARM support" ON)
+option(onnxruntime_USE_ARM_DOTPROD "Build with ARMv8.2 dotprod support" ON)
 
 set(protobuf_BUILD_TESTS OFF CACHE BOOL "Build protobuf tests" FORCE)
 #nsync tests failed on Mac Build

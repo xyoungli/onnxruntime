@@ -24,6 +24,7 @@ void test_model(const char* model_path, std::vector<std::string>& providers,
   // initialize session options if needed
   Ort::SessionOptions session_options;
   session_options.SetIntraOpNumThreads(1);
+  session_options.EnableProfiling("profile.txt");
   if (optimized_model_path) {
     session_options.SetOptimizedModelFilePath(optimized_model_path);
   }

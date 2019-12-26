@@ -18,7 +18,8 @@ void test_model(const char* model_path, std::vector<std::string>& providers,
   //*************************************************************************
   // initialize  enviroment...one enviroment per process
   // enviroment maintains thread pools and other state info
-  Ort::Env env(ORT_LOGGING_LEVEL_WARNING, "test");
+//  Ort::Env env(ORT_LOGGING_LEVEL_WARNING, "test");
+  Ort::Env env(ORT_LOGGING_LEVEL_VERBOSE, "test");
 
   // initialize session options if needed
   Ort::SessionOptions session_options;

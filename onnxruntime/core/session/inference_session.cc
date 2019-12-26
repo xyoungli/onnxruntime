@@ -577,6 +577,8 @@ common::Status InferenceSession::TransformGraph(onnxruntime::Graph& graph,
   // 5. insert cast nodes.
 
   // first apply global(execution provider independent),  level 1(default/system/basic) graph to graph optimizations
+  LOGS(*session_logger_, INFO) << "apply global(execution provider independent),  "
+                               << "level 1(default/system/basic) graph to graph optimizations.";
   ORT_RETURN_IF_ERROR_SESSIONID_(graph_transformer_mgr.ApplyTransformers(graph, TransformerLevel::Level1, *session_logger_));
 
 #ifdef USE_DML
@@ -597,17 +599,21 @@ common::Status InferenceSession::TransformGraph(onnxruntime::Graph& graph,
 #endif
 
   // Do partitioning based on execution providers' capability.
+  LOGS(*session_logger_, INFO) << "Do partitioning graph transform based on execution providers' capability. "
+                               << "At this step, each node is set a execution provider";
   GraphPartitioner partitioner(kernel_registry_manager, providers);
   ORT_RETURN_IF_ERROR_SESSIONID_(partitioner.Partition(graph, session_state.ExportDll(), session_state.GetMutableFuncMgr()));
 
   // apply transformers except default transformers
   // Default transformers are required for correctness and they are owned and run by inference session
+  LOGS(*session_logger_, INFO) << "apply transformers except default transformers. ";
   for (int i = static_cast<int>(TransformerLevel::Level1); i <= static_cast<int>(TransformerLevel::MaxLevel); i++) {
     ORT_RETURN_IF_ERROR_SESSIONID_(graph_transformer_mgr.ApplyTransformers(graph, static_cast<TransformerLevel>(i), *session_logger_));
   }
 
   bool modified = false;
   // Insert cast node/s.
+  LOGS(*session_logger_, INFO) << "Insert cast node/s. ";
   ORT_RETURN_IF_ERROR_SESSIONID_(insert_cast_transformer.Apply(graph, modified, *session_logger_));
 
   // Now every node should be already assigned to an execution provider
@@ -656,6 +662,7 @@ common::Status InferenceSession::TransformGraph(onnxruntime::Graph& graph,
   }
 
   // Insert copy node/s.
+  LOGS(*session_logger_, INFO) << "Insert copy node/s. ";
   MemcpyTransformer copy_transformer{provider_types, kernel_registry_manager};
   ORT_RETURN_IF_ERROR_SESSIONID_(copy_transformer.Apply(graph, modified, *session_logger_));
 
@@ -797,6 +804,7 @@ common::Status InferenceSession::Initialize() {
     // The 1st ones should have already been registered via session-level API into KernelRegistryManager.
     //
     // Register 2nd registries into KernelRegistryManager.
+    LOGS(*session_logger_, INFO) << "register kernel based on execution provider.";
     ORT_RETURN_IF_ERROR_SESSIONID_(kernel_registry_manager_.RegisterKernels(execution_providers_));
 
     SessionStateInitializer session_initializer(session_options_.enable_mem_pattern, model_location_, graph,
@@ -826,6 +834,7 @@ common::Status InferenceSession::Initialize() {
       }
     }
 
+    LOGS(*session_logger_, INFO) << "Session create plan. At this step, node binds its kernel based on provider.";
     ORT_RETURN_IF_ERROR_SESSIONID_(session_initializer.CreatePlan(nullptr, nullptr, session_options_.execution_mode));
 
     // handle any subgraphs

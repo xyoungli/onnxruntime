@@ -113,8 +113,10 @@ Use the individual flags to only run the specified stages.
                         help="Create ARM64 makefiles. Requires --update and no existing cache CMake setup. Delete CMakeCache.txt if needed")
     parser.add_argument("--msvc_toolset", help="MSVC toolset to use. e.g. 14.11")
     parser.add_argument("--android", action='store_true', help='Build for Android')
-    parser.add_argument("--android_abi", type=str, default='arm64-v8a',
-            help='arm64-v8a or armeabi-v7a with NEON')
+    parser.add_argument("--android_abi", type=str, default='armv8',
+            help='armv8 or armv7')
+    parser.add_argument("--android_toolchain", type=str, default='clang',
+                        help='gcc or clang')
     parser.add_argument("--android_api", type=int, default=27,
             help='Android API Level, e.g. 21')
     parser.add_argument("--android_ndk_path", default="", help="Path to the Android NDK")
@@ -283,11 +285,11 @@ def generate_build_tree(cmake_path, source_dir, build_dir, cuda_home, cudnn_home
     cmake_dir = os.path.join(source_dir)#, "cmake"
     # TODO: fix jemalloc build so it does not conflict with onnxruntime shared lib builds. (e.g. onnxuntime_pybind)
     # for now, disable jemalloc if pybind is also enabled.
+    # "-DPYTHON_EXECUTABLE=" + sys.executable,
     cmake_args = [cmake_path, cmake_dir,
                  "-Donnxruntime_RUN_ONNX_TESTS=" + ("ON" if args.enable_onnx_tests else "OFF"),
                  "-Donnxruntime_GENERATE_TEST_REPORTS=ON",
                  "-Donnxruntime_DEV_MODE=" + ("OFF" if args.android else "ON"),
-                 "-DPYTHON_EXECUTABLE=" + sys.executable,
                  "-Donnxruntime_USE_CUDA=" + ("ON" if args.use_cuda else "OFF"),
                  "-Donnxruntime_USE_NSYNC=" + ("OFF" if is_windows() or not args.use_nsync else "ON"),
                  "-Donnxruntime_CUDNN_HOME=" + (cudnn_home if args.use_cuda else ""),
@@ -357,9 +359,15 @@ def generate_build_tree(cmake_path, source_dir, build_dir, cuda_home, cudnn_home
                        "-Deigen_SOURCE_PATH=" + args.eigen_path]
 
     if args.android:
+        if args.android_abi == "armv7":
+            android_abi = "armeabi-v7a with NEON"
+        elif args.android_abi == "armv8":
+            android_abi = "arm64-v8a"
+        else:
+            android_abi = args.android_abi
         cmake_args += ["-DCMAKE_TOOLCHAIN_FILE=" + args.android_ndk_path + "/build/cmake/android.toolchain.cmake",
                 "-DANDROID_PLATFORM=android-" + str(args.android_api),
-                "-DANDROID_ABI=" + str(args.android_abi)]
+                "-DANDROID_ABI=" + str(android_abi), "-DANDROID_TOOLCHAIN=" + str(args.android_toolchain) ]
 
     if path_to_protoc_exe:
         cmake_args += ["-DONNX_CUSTOM_PROTOC_EXECUTABLE=%s" % path_to_protoc_exe]

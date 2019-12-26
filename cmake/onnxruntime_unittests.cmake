@@ -906,6 +906,10 @@ else()
   # need to ignore the linker warning 4199, due to some global linker flags failing here
 endif()
 set_property(TARGET custom_op_library APPEND_STRING PROPERTY LINK_FLAGS ${ONNXRUNTIME_CUSTOM_OP_LIB_LINK_FLAG})
+add_custom_command(TARGET custom_op_library POST_BUILD
+  COMMAND "${CMAKE_STRIP}" -s
+  "libcustom_op_library.so"
+  COMMENT "Strip debug symbols done on shared lib.")
 
 if (onnxruntime_BUILD_JAVA)
     message(STATUS "Running Java tests")

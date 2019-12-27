@@ -117,12 +117,36 @@ void test_model(const char* model_path, std::vector<std::string>& providers,
     for (int k = 0; k < dims.size(); ++k) {
       size *= dims[k];
     }
-    Ort::Value input_tensor = Ort::Value::CreateTensor<float>(allocator, dims.data(), dims.size());
-    assert(input_tensor.IsTensor());
-    fill_data_const(input_tensor.GetTensorMutableData<float>(), 1.f, size);
-    input_tensors.push_back(std::move(input_tensor));
+    if (type == ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT) {
+      Ort::Value input_tensor = Ort::Value::CreateTensor<float>(allocator, dims.data(), dims.size());
+      assert(input_tensor.IsTensor());
+      fill_data_const(input_tensor.GetTensorMutableData<float>(), 1.f, size);
+      input_tensors.push_back(std::move(input_tensor));
+    } else if (type == ONNX_TENSOR_ELEMENT_DATA_TYPE_INT32) {
+      Ort::Value input_tensor = Ort::Value::CreateTensor<int32_t>(allocator, dims.data(), dims.size());
+      assert(input_tensor.IsTensor());
+      fill_data_const(input_tensor.GetTensorMutableData<int32_t>(), 1, size);
+      input_tensors.push_back(std::move(input_tensor));
+    } else {
+      std::cerr << "unsupport input data type: " << type << std::endl;
+      return;
+    }
+
   }
   printf("\n");
+
+//  auto ptr0 = input_tensors[0].GetTensorMutableData<int>();
+//  auto ptr1 = input_tensors[1].GetTensorMutableData<int>();
+//  auto ptr2 = input_tensors[2].GetTensorMutableData<int>();
+//  auto ptr3 = input_tensors[3].GetTensorMutableData<int>();
+//  auto ptr4 = input_tensors[4].GetTensorMutableData<int>();
+//  for (int i = 0; i < 18; i++) {
+//    ptr0[i] = i % 5;
+//    ptr1[i] = i % 6;
+//    ptr2[i] = i % 6;
+//    ptr3[i] = i;
+//  }
+//  ptr4[0] = 18;
 
   // iterate over all output nodes
   for (int i = 0; i < num_output_nodes; i++) {
@@ -144,6 +168,7 @@ void test_model(const char* model_path, std::vector<std::string>& providers,
     for (int j = 0; j < dims.size(); j++) {
       printf(", dim %d=%jd", j, dims[j]);
     }
+    printf("\n");
     output_node_dims.push_back(dims);
   }
   printf("\n");
@@ -177,22 +202,20 @@ void test_model(const char* model_path, std::vector<std::string>& providers,
 
   // Get pointer to output tensor float values
   auto floatarr = output_tensors.front().GetTensorMutableData<float>();
-  assert(fabs(floatarr[0] - 0.000045) < 1e-6);
 
   // actual output shape
   // iterate over all output nodes
   for (int i = 0; i < num_output_nodes; i++) {
-    char* output_name = session.GetOutputName(i, allocator);
-    printf("Actual Output %d : name=%s ", i, output_name);
-    output_node_names[i] = output_name;
-    Ort::TypeInfo type_info = session.GetOutputTypeInfo(i);
+    Ort::TypeInfo type_info = output_tensors[0].GetTypeInfo();
     auto tensor_info = type_info.GetTensorTypeAndShapeInfo();
     ONNXTensorElementDataType type = tensor_info.GetElementType();
-    printf(", type=%d ", type);
+    printf("output name: %s, data type=%d ", output_node_names[i], type);
     auto dims = tensor_info.GetShape();
     printf(", num_dims=%zu ", dims.size());
-    for (int j = 0; j < dims.size(); j++)
+    for (int j = 0; j < dims.size(); j++) {
       printf(", dim %d=%jd", j, dims[j]);
+    }
+    printf("\n");
   }
   printf("\n");
 
@@ -268,12 +291,12 @@ int main(int argc, char* argv[]) {
     }
   }
 
-  int warmup_iter = 5;
+  int warmup_iter = 0;
   if (argc > 4) {
     warmup_iter = atoi(argv[4]);
     printf("warmup iters: %d\n", warmup_iter);
   }
-  int repeats = 10;
+  int repeats = 1;
   if (argc > 5) {
     repeats = atoi(argv[5]);
     printf("repeats: %d\n", repeats);

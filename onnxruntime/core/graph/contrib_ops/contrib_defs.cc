@@ -2481,6 +2481,20 @@ It's an extension of Gelu. It takes the sum of input A and bias input B as the i
 
   RegisterBertSchemas();
 
+  ONNX_CONTRIB_OPERATOR_SCHEMA(Transpose2)
+          .SetDomain(kOnnxDomain)
+          .SinceVersion(1)
+          .Input(0, "data", "An input tensor.", "T")
+          .Input(1, "perm", "perm tensor.", "T1")
+          .Output(0, "transposed", "Transposed output.", "T")
+          .TypeConstraint("T", ONNX_NAMESPACE::OpSchema::all_tensor_types(),
+                          "Constrain input and output types to all tensor types.")
+          .TypeConstraint("T1", {"tensor(int32)"},
+                          "Constrain perm types to int32 or int64 tensor types.")
+          .TypeAndShapeInferenceFunction([](ONNX_NAMESPACE::InferenceContext& ctx) {
+            propagateElemTypeFromInputToOutput(ctx, 0, 0);
+          });
+
 #ifdef MICROSOFT_INTERNAL
   // register internal ops
   RegisterInternalSchemas();

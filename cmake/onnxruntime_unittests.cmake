@@ -71,10 +71,12 @@ function(AddTest)
     COMMAND ${_UT_TARGET} ${TEST_ARGS}
     WORKING_DIRECTORY $<TARGET_FILE_DIR:${_UT_TARGET}>
     )
-  add_custom_command(TARGET ${_UT_TARGET} POST_BUILD
-    COMMAND "${CMAKE_STRIP}" -s
-    "${_UT_TARGET}"
-    COMMENT "Strip debug symbols done on final executable file.")
+  if (${CMAKE_BUILD_TYPE} STREQUAL "Release" OR ${CMAKE_BUILD_TYPE} STREQUAL "MinSizeRel")
+    add_custom_command(TARGET ${_UT_TARGET} POST_BUILD
+      COMMAND "${CMAKE_STRIP}" -s
+      "${_UT_TARGET}"
+      COMMENT "Strip debug symbols done on final executable file.")
+  endif()
 endfunction(AddTest)
 
 #Do not add '${TEST_SRC_DIR}/util/include' to your include directories directly
@@ -651,10 +653,12 @@ target_link_libraries(onnx_test_runner PRIVATE onnx_test_runner_common ${GETOPT_
 target_include_directories(onnx_test_runner PRIVATE ${ONNXRUNTIME_ROOT})
 set_target_properties(onnx_test_runner PROPERTIES FOLDER "ONNXRuntimeTest")
 
-add_custom_command(TARGET onnx_test_runner POST_BUILD
-  COMMAND "${CMAKE_STRIP}" -s
-  "onnx_test_runner"
-  COMMENT "Strip debug symbols done on final executable file.")
+if (${CMAKE_BUILD_TYPE} STREQUAL "Release" OR ${CMAKE_BUILD_TYPE} STREQUAL "MinSizeRel")
+  add_custom_command(TARGET onnx_test_runner POST_BUILD
+    COMMAND "${CMAKE_STRIP}" -s
+    "onnx_test_runner"
+    COMMENT "Strip debug symbols done on final executable file.")
+endif()
 
 if (onnxruntime_USE_TVM)
   if (WIN32)
@@ -746,10 +750,12 @@ if (onnxruntime_USE_TVM)
   endif()
 endif()
 
-add_custom_command(TARGET onnxruntime_perf_test POST_BUILD
-  COMMAND "${CMAKE_STRIP}" -s
-  "onnxruntime_perf_test"
-  COMMENT "Strip debug symbols done on final executable file.")
+if (${CMAKE_BUILD_TYPE} STREQUAL "Release" OR ${CMAKE_BUILD_TYPE} STREQUAL "MinSizeRel")
+  add_custom_command(TARGET onnxruntime_perf_test POST_BUILD
+    COMMAND "${CMAKE_STRIP}" -s
+    "onnxruntime_perf_test"
+    COMMENT "Strip debug symbols done on final executable file.")
+endif()
 
 
 # Opaque API test can not be a part of the shared lib tests since it is using
@@ -923,10 +929,12 @@ else()
   # need to ignore the linker warning 4199, due to some global linker flags failing here
 endif()
 set_property(TARGET custom_op_library APPEND_STRING PROPERTY LINK_FLAGS ${ONNXRUNTIME_CUSTOM_OP_LIB_LINK_FLAG})
-add_custom_command(TARGET custom_op_library POST_BUILD
-  COMMAND "${CMAKE_STRIP}" -s
-  "libcustom_op_library.so"
-  COMMENT "Strip debug symbols done on shared lib.")
+if (${CMAKE_BUILD_TYPE} STREQUAL "Release" OR ${CMAKE_BUILD_TYPE} STREQUAL "MinSizeRel")
+  add_custom_command(TARGET custom_op_library POST_BUILD
+    COMMAND "${CMAKE_STRIP}" -s
+    "libcustom_op_library.so"
+    COMMENT "Strip debug symbols done on shared lib.")
+endif()
 
 if (onnxruntime_BUILD_JAVA)
     message(STATUS "Running Java tests")

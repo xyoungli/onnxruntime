@@ -30,10 +30,12 @@ set_target_properties(onnxruntime PROPERTIES VERSION ${ORT_VERSION})
 add_dependencies(onnxruntime onnxruntime_generate_def ${onnxruntime_EXTERNAL_DEPENDENCIES})
 target_include_directories(onnxruntime PRIVATE ${ONNXRUNTIME_ROOT})
 onnxruntime_add_include_to_target(onnxruntime)
-add_custom_command(TARGET onnxruntime POST_BUILD
-  COMMAND "${CMAKE_STRIP}" -s
-  libonnxruntime.so
-  COMMENT "Strip debug symbols done on final executable file.")
+if (${CMAKE_BUILD_TYPE} STREQUAL "Release" OR ${CMAKE_BUILD_TYPE} STREQUAL "MinSizeRel")
+  add_custom_command(TARGET onnxruntime POST_BUILD
+    COMMAND "${CMAKE_STRIP}" -s
+    libonnxruntime.so
+    COMMENT "Strip debug symbols done on final executable file.")
+endif()
 
 if (onnxruntime_USE_CUDA)
   target_include_directories(onnxruntime PRIVATE ${onnxruntime_CUDNN_HOME}/include ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})

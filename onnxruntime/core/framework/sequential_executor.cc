@@ -64,10 +64,10 @@ Status SequentialExecutor::Execute(const SessionState& session_state, const std:
 
   ExecutionFrame frame{feed_mlvalue_idxs, feeds, fetch_mlvalue_idxs, fetches, fetch_allocators, session_state};
 
-  LOGS(logger, INFO) << "Begin execution";
+//  LOGS(logger, INFO) << "Begin execution";
   const SequentialExecutionPlan& seq_exec_plan = *session_state.GetExecutionPlan();
   const auto& exec_plan_vec = seq_exec_plan.execution_plan;
-  VLOGS(logger, 1) << "Size of execution plan vector: " << exec_plan_vec.size();
+//  VLOGS(logger, 1) << "Size of execution plan vector: " << exec_plan_vec.size();
 
   // uncomment the line below to dump execution plan
   //std::cout << std::make_pair(p_seq_exec_plan, &session_state) << "\n";
@@ -158,7 +158,7 @@ Status SequentialExecutor::Execute(const SessionState& session_state, const std:
                                                      {{"op_name", p_op_kernel->KernelDef().OpName()}});
 
       // call compute on the kernel
-      VLOGS(logger, 1) << "Computing kernel: " << p_op_kernel->Node().Name();
+//      VLOGS(logger, 1) << "Computing kernel: " << p_op_kernel->Node().Name();
 
       kernel_begin_time = session_state.Profiler().StartTime();
     }
@@ -245,14 +245,14 @@ Status SequentialExecutor::Execute(const SessionState& session_state, const std:
 #endif
 
     // free ml-values corresponding to this node
-    VLOGS(logger, 1) << "Releasing node ML values after computing kernel: " << p_op_kernel->Node().Name();
+//    VLOGS(logger, 1) << "Releasing node ML values after computing kernel: " << p_op_kernel->Node().Name();
     ORT_RETURN_IF_ERROR(ReleaseNodeMLValues(frame, seq_exec_plan, node_exec_plan, logger));
   }
 
-  VLOGS(logger, 1) << "Fetching output.";
+//  VLOGS(logger, 1) << "Fetching output.";
   // ExecutionFrame::Finalize will update 'fetches' with the final output
   ORT_RETURN_IF_ERROR(frame.GetOutputs(fetches));
-  VLOGS(logger, 1) << "Done with execution.";
+//  VLOGS(logger, 1) << "Done with execution.";
 
   if (frame.HasMemoryPatternPlanner()) {
     std::vector<std::reference_wrapper<const TensorShape>> input_shapes;

@@ -4,14 +4,14 @@
 # Minimum CMake required
 cmake_minimum_required(VERSION 3.13)
 
-set(ANDROID_NDK "/Users/lixiaoyang/android-ndk-r17c")
-set(CMAKE_TOOLCHAIN_FILE ${ANDROID_NDK}/build/cmake/android.toolchain.cmake)
-set(ANDROID_NATIVE_API_LEVEL 25)
+#set(ANDROID_NDK "/Users/lixiaoyang/android-ndk-r17c")
+#set(CMAKE_TOOLCHAIN_FILE ${ANDROID_NDK}/build/cmake/android.toolchain.cmake)
+#set(ANDROID_NATIVE_API_LEVEL 25)
 #set(ANDROID_TOOLCHAIN gcc)
 #set(ANDROID_ABI "armeabi-v7a")
 #set(ANDROID_ARM_NEON TRUE)
 #set(ANDROID_TOOLCHAIN clang)
-set(ANDROID_ABI "arm64-v8a")
+#set(ANDROID_ABI "arm64-v8a")
 
 # Project
 project(onnxruntime C CXX)
@@ -94,7 +94,7 @@ option(onnxruntime_USE_DML "Build with DirectML support" OFF)
 option(onnxruntime_USE_ACL "Build with ACL support" OFF)
 option(onnxruntime_ENABLE_INSTRUMENT "Enable Instrument with Event Tracing for Windows (ETW)" OFF)
 option(onnxruntime_USE_TELEMETRY "Build with Telemetry" OFF)
-option(onnxruntime_USE_ARM "Build with ARM support" ON)
+option(onnxruntime_USE_ARM "Build with ARM support" OFF)
 option(onnxruntime_USE_ARM_DOTPROD "Build with ARMv8.2 dotprod support" ON)
 
 set(protobuf_BUILD_TESTS OFF CACHE BOOL "Build protobuf tests" FORCE)
@@ -172,6 +172,8 @@ if(onnxruntime_CROSS_COMPILING)
     string(APPEND CMAKE_C_FLAGS " -Wno-error=attributes")
   endif()
 endif()
+
+#set(CMAKE_VERBOSE_MAKEFILE ON)
 
 #must after OpenMP settings
 find_package(Threads)
@@ -747,16 +749,16 @@ endif()
 #The following files may use the 'onnxruntime_libs' and 'onnxruntime_EXTERNAL_LIBRARIES' vars
 
 if (onnxruntime_BUILD_SHARED_LIB)
-  include(onnxruntime.cmake)
+  include(${PROJECT_CMAKE}/onnxruntime.cmake)
 endif()
 
 if (onnxruntime_BUILD_SERVER)
-  include(onnxruntime_server.cmake)
+  include(${PROJECT_CMAKE}/onnxruntime_server.cmake)
 endif()
 
 if (onnxruntime_BUILD_JAVA)
   message(STATUS "Java Build is enabled")
-  include(onnxruntime_java.cmake)
+  include(${PROJECT_CMAKE}/onnxruntime_java.cmake)
 endif()
 
 # some of the tests rely on the shared libs to be
@@ -766,7 +768,7 @@ if (onnxruntime_BUILD_UNIT_TESTS)
     if(UNIX)
       set(CMAKE_SKIP_BUILD_RPATH ON)
     endif()
-    include(onnxruntime_python.cmake)
+    include(${PROJECT_CMAKE}/onnxruntime_python.cmake)
   endif()
   # we need to make sure this is turned off since it
   # turned ON by the previous step when building a shared lib

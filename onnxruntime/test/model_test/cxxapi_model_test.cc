@@ -15,6 +15,7 @@ void test_model(const char* model_path, std::vector<std::string>& providers,
                 std::vector<std::vector<int64_t>>& input_shapes,
                 int warmup_iter, int repeats, int power_mode, int threads,
                 const char* optimized_model_path = nullptr) {
+  (void)(providers);
   //*************************************************************************
   // initialize  enviroment...one enviroment per process
   // enviroment maintains thread pools and other state info
@@ -24,7 +25,7 @@ void test_model(const char* model_path, std::vector<std::string>& providers,
   // initialize session options if needed
   Ort::SessionOptions session_options;
   session_options.SetIntraOpNumThreads(1);
-  session_options.EnableProfiling("profile.txt");
+//  session_options.EnableProfiling("profile.txt");
   if (optimized_model_path) {
     session_options.SetOptimizedModelFilePath(optimized_model_path);
   }
@@ -39,6 +40,7 @@ void test_model(const char* model_path, std::vector<std::string>& providers,
       if (device_name == providers[i]) return true;
     return false;
   };
+  (void)(use_device);
 #ifdef USE_ARM
   if (use_device("arm")) {
     printf("add provider: arm\n");
@@ -96,7 +98,7 @@ void test_model(const char* model_path, std::vector<std::string>& providers,
     auto dims = tensor_info.GetShape();
     printf(", num_dims=%zu ", dims.size());
     for (int j = 0; j < dims.size(); j++) {
-      printf(", dim %d=%jd", j, dims[j]);
+      printf(", dim %d=%lld", j, dims[j]);
       if (dims[j] < 0) {
         dims[j] = 1;
         printf(" is < 0, set to 1");
@@ -107,7 +109,7 @@ void test_model(const char* model_path, std::vector<std::string>& providers,
       dims = input_shapes[i];
       printf(", reset size to user input: ");
       for (int j = 0; j < dims.size(); j++) {
-        printf(", dim %d=%jd", j, dims[j]);
+        printf(", dim %d=%lld", j, dims[j]);
       }
     }
     printf("\n");
@@ -125,7 +127,7 @@ void test_model(const char* model_path, std::vector<std::string>& providers,
     } else if (type == ONNX_TENSOR_ELEMENT_DATA_TYPE_INT32) {
       Ort::Value input_tensor = Ort::Value::CreateTensor<int32_t>(allocator, dims.data(), dims.size());
       assert(input_tensor.IsTensor());
-      fill_data_const(input_tensor.GetTensorMutableData<int32_t>(), 1, size);
+      fill_data_const(input_tensor.GetTensorMutableData<int32_t>(), 2, size);
       input_tensors.push_back(std::move(input_tensor));
     } else {
       std::cerr << "unsupport input data type: " << type << std::endl;
@@ -135,18 +137,21 @@ void test_model(const char* model_path, std::vector<std::string>& providers,
   }
   printf("\n");
 
-//  auto ptr0 = input_tensors[0].GetTensorMutableData<int>();
-//  auto ptr1 = input_tensors[1].GetTensorMutableData<int>();
-//  auto ptr2 = input_tensors[2].GetTensorMutableData<int>();
-//  auto ptr3 = input_tensors[3].GetTensorMutableData<int>();
-//  auto ptr4 = input_tensors[4].GetTensorMutableData<int>();
-//  for (int i = 0; i < 18; i++) {
-//    ptr0[i] = i % 5;
-//    ptr1[i] = i % 6;
-//    ptr2[i] = i % 6;
-//    ptr3[i] = i;
-//  }
-//  ptr4[0] = 18;
+//  auto ptr0 = input_tensors[0].GetTensorMutableData<int>();  // pos
+//  auto ptr1 = input_tensors[1].GetTensorMutableData<int>();  // length
+//  auto ptr2 = input_tensors[2].GetTensorMutableData<int>();  // input
+//  auto ptr3 = input_tensors[3].GetTensorMutableData<int>();  // char
+//
+//  std::vector<int> input_ids = {20980,375,34,5593,1798,35,7179,17,3511,663,20982,7147,8420,35,20982,605,14,20981};
+//  std::vector<int> char_ids = {5479,0,1669,0,4154,0,1954,2265,1441,0,4480,0,511,2313,110,0,4626,0,1714,0,5471,854,
+//                               1581,2368,379,0,4480,0,4934,2644,3116,0,2043,0,5480,0};
+//  std::vector<int> length = {1,1,1,2,1,1,2,1,1,1,2,2,1,1,2,1,1,1};
+//  std::vector<int> pos_ids = {57,42,29,4,54,29,38,45,4,18,4,40,54,29,4,16,45,0};
+//
+//  std::memcpy(ptr0, pos_ids.data(), sizeof(int) * pos_ids.size());
+//  std::memcpy(ptr1, length.data(), sizeof(int) * length.size());
+//  std::memcpy(ptr2, input_ids.data(), sizeof(int) * input_ids.size());
+//  std::memcpy(ptr3, char_ids.data(), sizeof(int) * char_ids.size());
 
   // iterate over all output nodes
   for (int i = 0; i < num_output_nodes; i++) {
@@ -166,7 +171,7 @@ void test_model(const char* model_path, std::vector<std::string>& providers,
     auto dims = tensor_info.GetShape();
     printf(", num_dims=%zu ", dims.size());
     for (int j = 0; j < dims.size(); j++) {
-      printf(", dim %d=%jd", j, dims[j]);
+      printf(", dim %d=%lld", j, dims[j]);
     }
     printf("\n");
     output_node_dims.push_back(dims);
@@ -198,30 +203,43 @@ void test_model(const char* model_path, std::vector<std::string>& providers,
             << ", max time: " << t0.LapTimes().Max() << " ms"
             << ", min time: " << t0.LapTimes().Min() << " ms.\n";
 
-  assert(output_tensors.size() == 1 && output_tensors.front().IsTensor());
-
-  // Get pointer to output tensor float values
-  auto floatarr = output_tensors.front().GetTensorMutableData<float>();
-
   // actual output shape
   // iterate over all output nodes
+  std::vector<int64_t> output_sizes(num_output_nodes);
+  std::vector<ONNXTensorElementDataType> output_types(num_output_nodes);
   for (int i = 0; i < num_output_nodes; i++) {
     Ort::TypeInfo type_info = output_tensors[0].GetTypeInfo();
     auto tensor_info = type_info.GetTensorTypeAndShapeInfo();
     ONNXTensorElementDataType type = tensor_info.GetElementType();
+    output_types[i] = type;
     printf("output name: %s, data type=%d ", output_node_names[i], type);
     auto dims = tensor_info.GetShape();
     printf(", num_dims=%zu ", dims.size());
+    int64_t size = 1;
     for (int j = 0; j < dims.size(); j++) {
-      printf(", dim %d=%jd", j, dims[j]);
+      printf(", dim %d=%lld", j, dims[j]);
+      size *= dims[j];
     }
     printf("\n");
+    output_sizes[i] = size;
   }
   printf("\n");
 
-  // score the model, and print scores for first 5 classes
-  for (int i = 0; i < 5; i++)
-    printf("output[%d] =  %f\n", i, floatarr[i]);
+  // Get pointer to output tensor float values
+  auto floatarr = output_tensors[0].GetTensorMutableData<float>();
+  auto intarr = reinterpret_cast<int*>(floatarr);
+  (void)(intarr);
+
+  for (int i = 0; i < std::min(static_cast<int64_t>(100), output_sizes[0]); i++) {
+    if (output_types[0] == ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT) {
+      printf("output[%d] =  %f\n", i, floatarr[i]);
+    } else if (output_types[0] == ONNX_TENSOR_ELEMENT_DATA_TYPE_INT32) {
+      printf("output[%d] =  %d\n", i, intarr[i]);
+    } else {
+      std::cerr << "unsupport input data type: " << output_types[0] << std::endl;
+      return;
+    }
+  }
   printf("Done!\n");
 }
 

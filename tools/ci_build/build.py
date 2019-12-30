@@ -113,8 +113,7 @@ Use the individual flags to only run the specified stages.
                         help="Create ARM64 makefiles. Requires --update and no existing cache CMake setup. Delete CMakeCache.txt if needed")
     parser.add_argument("--msvc_toolset", help="MSVC toolset to use. e.g. 14.11")
     parser.add_argument("--android", action='store_true', help='Build for Android')
-    parser.add_argument("--android_abi", type=str, default='armv8',
-            help='armv8 or armv7')
+    parser.add_argument("--android_abi", type=str, default='', help='armv8 or armv7')
     parser.add_argument("--android_toolchain", type=str, default='clang',
                         help='gcc or clang')
     parser.add_argument("--android_api", type=int, default=27,

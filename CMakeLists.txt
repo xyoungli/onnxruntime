@@ -631,6 +631,8 @@ endif()
 configure_file(${PROJECT_CMAKE}/onnxruntime_config.h.in ${CMAKE_CURRENT_BINARY_DIR}/onnxruntime_config.h)
 
 if (onnxruntime_USE_CUDA)
+  find_package(CUDA REQUIRED)
+  include_directories(${CUDA_INCLUDE_DIRS})
   add_definitions(-DUSE_CUDA=1)
   #The following 6 lines are copied from https://gitlab.kitware.com/cmake/cmake/issues/17559
   set( CMAKE_CUDA_FLAGS "" CACHE STRING "" )

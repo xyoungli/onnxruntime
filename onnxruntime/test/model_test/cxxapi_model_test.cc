@@ -75,7 +75,11 @@ void test_model(const char* model_path, std::vector<std::string>& providers,
   printf("Number of inputs = %zu, Number of outputs = %zu\n", num_input_nodes, num_output_nodes);
 
   if (!input_shapes.empty()) {
-    assert(input_shapes.size() == num_input_nodes);
+    if (input_shapes.size() != num_input_nodes) {
+      std::cerr << "number of input shapes must equal to number of input nodes, got:"
+                << input_shapes.size() <<  ", expect: " << num_input_nodes << std::endl;
+      return;
+    }
   }
   std::vector<Ort::Value> input_tensors;
   // create input tensor object from data values
@@ -98,18 +102,22 @@ void test_model(const char* model_path, std::vector<std::string>& providers,
     auto dims = tensor_info.GetShape();
     printf(", num_dims=%zu ", dims.size());
     for (int j = 0; j < dims.size(); j++) {
-      printf(", dim %d=%lld", j, dims[j]);
+      printf(", dim %d=%ld", j, dims[j]);
       if (dims[j] < 0) {
         dims[j] = 1;
         printf(" is < 0, set to 1");
       }
     }
     if (!input_shapes.empty()) {
-      assert(input_shapes[i].size() == dims.size());
+      if (input_shapes[i].size() != dims.size()) {
+        std::cerr << "input shape size must equal to tensor's dims, got: "
+                  << input_shapes[i].size() << ", expect: " << dims.size() << std::endl;
+        return;
+      }
       dims = input_shapes[i];
       printf(", reset size to user input: ");
       for (int j = 0; j < dims.size(); j++) {
-        printf(", dim %d=%lld", j, dims[j]);
+        printf(", dim %d=%ld", j, dims[j]);
       }
     }
     printf("\n");
@@ -121,12 +129,18 @@ void test_model(const char* model_path, std::vector<std::string>& providers,
     }
     if (type == ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT) {
       Ort::Value input_tensor = Ort::Value::CreateTensor<float>(allocator, dims.data(), dims.size());
-      assert(input_tensor.IsTensor());
+      if (!input_tensor.IsTensor()) {
+        std::cerr << "input must be a tensor\n";
+        return;
+      }
       fill_data_const(input_tensor.GetTensorMutableData<float>(), 1.f, size);
       input_tensors.push_back(std::move(input_tensor));
     } else if (type == ONNX_TENSOR_ELEMENT_DATA_TYPE_INT32) {
       Ort::Value input_tensor = Ort::Value::CreateTensor<int32_t>(allocator, dims.data(), dims.size());
-      assert(input_tensor.IsTensor());
+      if (!input_tensor.IsTensor()) {
+        std::cerr << "input must be a tensor\n";
+        return;
+      }
       fill_data_const(input_tensor.GetTensorMutableData<int32_t>(), 2, size);
       input_tensors.push_back(std::move(input_tensor));
     } else {
@@ -171,7 +185,7 @@ void test_model(const char* model_path, std::vector<std::string>& providers,
     auto dims = tensor_info.GetShape();
     printf(", num_dims=%zu ", dims.size());
     for (int j = 0; j < dims.size(); j++) {
-      printf(", dim %d=%lld", j, dims[j]);
+      printf(", dim %d=%ld", j, dims[j]);
     }
     printf("\n");
     output_node_dims.push_back(dims);
@@ -217,7 +231,7 @@ void test_model(const char* model_path, std::vector<std::string>& providers,
     printf(", num_dims=%zu ", dims.size());
     int64_t size = 1;
     for (int j = 0; j < dims.size(); j++) {
-      printf(", dim %d=%lld", j, dims[j]);
+      printf(", dim %d=%ld", j, dims[j]);
       size *= dims[j];
     }
     printf("\n");

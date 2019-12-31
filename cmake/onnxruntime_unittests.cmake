@@ -370,15 +370,6 @@ set_target_properties(test_framework_basic PROPERTIES FOLDER "ONNXRuntimeTest")
 
 ## add ut for each test
 AddTest(
-  TARGET cpu_lstm_test
-  SOURCES ${TEST_SRC_DIR}/providers/test_main.cc
-  ${TEST_SRC_DIR}/providers/cpu/rnn/deep_cpu_lstm_op_test.cc
-  ${TEST_SRC_DIR}/providers/provider_test_utils.cc
-  LIBS ${onnxruntime_test_providers_libs} ${onnxruntime_test_common_libs} test_framework_basic
-  DEPENDS ${all_dependencies}
-)
-
-AddTest(
   TARGET cxxapi_model_test
   SOURCES ${TEST_SRC_DIR}/model_test/cxxapi_model_test.cc
   LIBS ${onnxruntime_test_providers_libs} ${onnxruntime_test_common_libs}

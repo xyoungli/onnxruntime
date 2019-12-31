@@ -5,5 +5,11 @@ set -e
 
 # Get directory this script is in
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-python3 $DIR/tools/ci_build/build.py --use_openmp --build_dir $DIR/build/Linux "$@"
+BUILD_TYPE="MinSizeRel" # "Debug", "MinSizeRel", "Release", "RelWithDebInfo"
+BUILD_DIR=$DIR/../build/Linux/
+
+python3 $DIR/tools/ci_build/build.py \
+  --skip_submodule_sync --skip_tests \
+  --config $BUILD_TYPE \
+  --use_openmp --build_dir $BUILD_DIR "$@"
 

@@ -48,7 +48,7 @@ The Test phase will run all unit tests, and optionally the ONNX tests.
 Use the individual flags to only run the specified stages.
                                      ''')
     # Main arguments
-    parser.add_argument("--build_dir", default="/Users/lixiaoyang/github/onnxruntime/build/Mac", help="Path to the build directory.")
+    parser.add_argument("--build_dir", required=True, help="Path to the build directory.")
     parser.add_argument("--config", nargs="+", default=["Debug"],
                         choices=["Debug", "MinSizeRel", "Release", "RelWithDebInfo"],
                         help="Configuration(s) to build.")

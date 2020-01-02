@@ -104,7 +104,7 @@ if (onnxruntime_USE_FEATURIZERS)
 endif()
 if (${CMAKE_BUILD_TYPE} STREQUAL "Release" OR ${CMAKE_BUILD_TYPE} STREQUAL "MinSizeRel")
   add_custom_command(TARGET onnxruntime_providers POST_BUILD
-    COMMAND "${CMAKE_STRIP}" -g -S -d --strip-debug --verbose
+    COMMAND "${CMAKE_STRIP}" ${STRIP_FLAGS}
     "libonnxruntime_providers.a"
     COMMENT "Strip debug symbols done on final static binary.")
 endif()
@@ -184,7 +184,7 @@ if (onnxruntime_USE_CUDA)
     endif()
   endif()
   add_custom_command(TARGET onnxruntime_providers_cuda POST_BUILD
-    COMMAND "${CMAKE_STRIP}" -g -S -d --strip-debug --verbose
+    COMMAND "${CMAKE_STRIP}" ${STRIP_FLAGS}
     "libonnxruntime_providers_cuda.a"
     COMMENT "Strip debug symbols done on final static binary.")
 endif()
@@ -505,7 +505,7 @@ if (onnxruntime_USE_ARM)
   set_target_properties(onnxruntime_providers_arm PROPERTIES LINKER_LANGUAGE CXX)
   if (${CMAKE_BUILD_TYPE} STREQUAL "Release" OR ${CMAKE_BUILD_TYPE} STREQUAL "MinSizeRel")
     add_custom_command(TARGET onnxruntime_providers_arm POST_BUILD
-      COMMAND "${CMAKE_STRIP}" -g -S -d --strip-debug --verbose
+      COMMAND "${CMAKE_STRIP}" ${STRIP_FLAGS}
       "libonnxruntime_providers_arm.a"
       COMMENT "Strip debug symbols done on final static binary.")
   endif()

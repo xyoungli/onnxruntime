@@ -10,6 +10,6 @@ BUILD_DIR=$DIR/../build/Linux/
 
 python3 $DIR/tools/ci_build/build.py \
   --skip_submodule_sync --skip_tests \
-  --config $BUILD_TYPE \
+  --config $BUILD_TYPE --parallel \
   --use_openmp --build_dir $BUILD_DIR "$@"
 

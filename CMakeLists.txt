@@ -347,6 +347,18 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Dgsl_CONFIG_CONTRACT_VIOLATION_THROWS")
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -DGSL_UNENFORCED_ON_CONTRACT_VIOLATION")
 set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -DGSL_UNENFORCED_ON_CONTRACT_VIOLATION")
 
+if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+  set(STRIP_FLAGS  -S)
+  set(STRIP_FLAGS_EXE  -S)
+  set(SHARED_LIB_EXT dylib)
+else()
+  set(STRIP_FLAGS -g -S -d --strip-debug --verbose)
+  set(STRIP_FLAGS_EXE -s)
+  if (NOT WIN32)
+    set(SHARED_LIB_EXT so)
+  ENDIF()
+endif ()
+
 include(eigen)
 #onnxruntime_EXTERNAL_LIBRARIES could contain onnx, onnx_proto,libprotobuf, cuda/cudnn, jemalloc,
 # dnnl/mklml, openblas, onnxruntime_codegen_tvm, tvm, nnvm_compiler and pthread

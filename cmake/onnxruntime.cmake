@@ -32,8 +32,8 @@ target_include_directories(onnxruntime PRIVATE ${ONNXRUNTIME_ROOT})
 onnxruntime_add_include_to_target(onnxruntime)
 if (${CMAKE_BUILD_TYPE} STREQUAL "Release" OR ${CMAKE_BUILD_TYPE} STREQUAL "MinSizeRel")
   add_custom_command(TARGET onnxruntime POST_BUILD
-    COMMAND "${CMAKE_STRIP}" -s
-    libonnxruntime.so
+    COMMAND "${CMAKE_STRIP}" ${STRIP_FLAGS_EXE}
+    libonnxruntime.${SHARED_LIB_EXT}
     COMMENT "Strip debug symbols done on final executable file.")
 endif()
 

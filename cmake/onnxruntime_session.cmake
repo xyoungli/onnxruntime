@@ -27,7 +27,7 @@ if (onnxruntime_ENABLE_LANGUAGE_INTEROP_OPS AND onnxruntime_ENABLE_PYTHON)
 endif()
 if (${CMAKE_BUILD_TYPE} STREQUAL "Release" OR ${CMAKE_BUILD_TYPE} STREQUAL "MinSizeRel")
   add_custom_command(TARGET onnxruntime_session POST_BUILD
-    COMMAND "${CMAKE_STRIP}" -g -S -d --strip-debug --verbose
+    COMMAND "${CMAKE_STRIP}" ${STRIP_FLAGS}
     "libonnxruntime_session.a"
     COMMENT "Strip debug symbols done on final static binary.")
 endif()

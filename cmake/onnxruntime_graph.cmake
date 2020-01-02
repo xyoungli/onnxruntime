@@ -62,7 +62,7 @@ if (WIN32)
 endif()
 if (${CMAKE_BUILD_TYPE} STREQUAL "Release" OR ${CMAKE_BUILD_TYPE} STREQUAL "MinSizeRel")
   add_custom_command(TARGET onnxruntime_graph POST_BUILD
-    COMMAND "${CMAKE_STRIP}" -g -S -d --strip-debug --verbose
+    COMMAND "${CMAKE_STRIP}" ${STRIP_FLAGS}
     "libonnxruntime_graph.a"
     COMMENT "Strip debug symbols done on final static binary.")
 endif()

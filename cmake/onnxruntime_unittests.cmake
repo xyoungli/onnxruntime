@@ -73,7 +73,7 @@ function(AddTest)
     )
   if (${CMAKE_BUILD_TYPE} STREQUAL "Release" OR ${CMAKE_BUILD_TYPE} STREQUAL "MinSizeRel")
     add_custom_command(TARGET ${_UT_TARGET} POST_BUILD
-      COMMAND "${CMAKE_STRIP}" -s
+      COMMAND "${CMAKE_STRIP}" ${STRIP_FLAGS_EXE}
       "${_UT_TARGET}"
       COMMENT "Strip debug symbols done on final executable file.")
   endif()
@@ -646,7 +646,7 @@ set_target_properties(onnx_test_runner PROPERTIES FOLDER "ONNXRuntimeTest")
 
 if (${CMAKE_BUILD_TYPE} STREQUAL "Release" OR ${CMAKE_BUILD_TYPE} STREQUAL "MinSizeRel")
   add_custom_command(TARGET onnx_test_runner POST_BUILD
-    COMMAND "${CMAKE_STRIP}" -s
+    COMMAND "${CMAKE_STRIP}" ${STRIP_FLAGS_EXE}
     "onnx_test_runner"
     COMMENT "Strip debug symbols done on final executable file.")
 endif()
@@ -743,7 +743,7 @@ endif()
 
 if (${CMAKE_BUILD_TYPE} STREQUAL "Release" OR ${CMAKE_BUILD_TYPE} STREQUAL "MinSizeRel")
   add_custom_command(TARGET onnxruntime_perf_test POST_BUILD
-    COMMAND "${CMAKE_STRIP}" -s
+    COMMAND "${CMAKE_STRIP}" ${STRIP_FLAGS_EXE}
     "onnxruntime_perf_test"
     COMMENT "Strip debug symbols done on final executable file.")
 endif()
@@ -922,8 +922,8 @@ endif()
 set_property(TARGET custom_op_library APPEND_STRING PROPERTY LINK_FLAGS ${ONNXRUNTIME_CUSTOM_OP_LIB_LINK_FLAG})
 if (${CMAKE_BUILD_TYPE} STREQUAL "Release" OR ${CMAKE_BUILD_TYPE} STREQUAL "MinSizeRel")
   add_custom_command(TARGET custom_op_library POST_BUILD
-    COMMAND "${CMAKE_STRIP}" -s
-    "libcustom_op_library.so"
+    COMMAND "${CMAKE_STRIP}" ${STRIP_FLAGS_EXE}
+    libcustom_op_library.${SHARED_LIB_EXT}
     COMMENT "Strip debug symbols done on shared lib.")
 endif()
 

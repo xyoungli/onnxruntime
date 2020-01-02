@@ -70,14 +70,14 @@ set_target_properties(onnx_proto PROPERTIES FOLDER "External/ONNX")
 
 if (${CMAKE_BUILD_TYPE} STREQUAL "Release" OR ${CMAKE_BUILD_TYPE} STREQUAL "MinSizeRel")
   add_custom_command(TARGET onnx POST_BUILD
-    COMMAND "${CMAKE_STRIP}" -g -S -d --strip-debug --verbose
+    COMMAND "${CMAKE_STRIP}" ${STRIP_FLAGS}
     "libonnx.a"
     COMMENT "Strip debug symbols done on final static binary.")
 endif()
 
 if (${CMAKE_BUILD_TYPE} STREQUAL "Release" OR ${CMAKE_BUILD_TYPE} STREQUAL "MinSizeRel")
   add_custom_command(TARGET onnx_proto POST_BUILD
-    COMMAND "${CMAKE_STRIP}" -g -S -d --strip-debug --verbose
+    COMMAND "${CMAKE_STRIP}" ${STRIP_FLAGS}
     "libonnx_proto.a"
     COMMENT "Strip debug symbols done on final static binary.")
 endif()

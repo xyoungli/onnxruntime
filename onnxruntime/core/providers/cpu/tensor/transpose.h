@@ -13,6 +13,7 @@ namespace onnxruntime {
 class TransposeBase {
  public:
   /**
+<<<<<<< HEAD
   Transpose the input Tensor into the output Tensor using the provided
   permutations.
   Both Tensors must have the same data type.
@@ -21,6 +22,13 @@ class TransposeBase {
                             const Tensor& input, Tensor& output);
   static Status DoUntypedTranspose(const std::vector<size_t>& permutations,
                                    const Tensor& input, Tensor& output);
+=======
+  Transpose the input Tensor into the output Tensor using the provided permutations.
+  Both Tensors must have the same data type. `input_shape_override` overrides the shape of `input` for compute purposes.
+  */
+  static Status DoTranspose(const std::vector<size_t>& permutations, const Tensor& input, Tensor& output,
+                            const TensorShape* input_shape_override = nullptr);
+>>>>>>> fd8ea4e4661a3333b36911330b057dba10ada9db
 
  protected:
   TransposeBase(const OpKernelInfo& info) {

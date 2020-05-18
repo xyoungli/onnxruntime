@@ -396,6 +396,12 @@ set(all_dependencies ${onnxruntime_test_providers_dependencies} )
 
   set(test_data_target onnxruntime_test_all)
 
+AddTest(
+  TARGET cxxapi_model_test
+  SOURCES ${TEST_SRC_DIR}/model_test/cxxapi_model_test.cc
+  LIBS ${onnxruntime_test_providers_libs} ${onnxruntime_test_common_libs}
+  DEPENDS ${all_dependencies}
+)
 
 #
 # onnxruntime_ir_graph test data

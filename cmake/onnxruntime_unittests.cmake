@@ -840,3 +840,10 @@ if (onnxruntime_BUILD_JAVA)
     endif()
     set_property(TEST onnxruntime4j_test APPEND PROPERTY DEPENDS onnxruntime4j_jni)
 endif()
+## add ut for each test
+AddTest(
+  TARGET ort_model_test
+  SOURCES ${TEST_SRC_DIR}/model_test/ort_model_test.cc
+  LIBS ${onnxruntime_test_providers_libs} ${onnxruntime_test_common_libs}
+  DEPENDS ${all_dependencies}
+)

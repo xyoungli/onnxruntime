@@ -15,12 +15,14 @@ set(CMAKE_OSX_DEPLOYMENT_TARGET "10.12" CACHE STRING "Minimum OS X deployment ve
 
 # Project
 project(onnxruntime C CXX)
+# Needed for Java
+set (CMAKE_C_STANDARD 99)
 
 include(CheckCXXCompilerFlag)
 include(CheckLanguage)
 
 # CentOS compiler is old but it does allow certain C++14 features
-# such as lambda captures and they are convinient
+# such as lambda captures and they are convenient
 # On the other hand it does not allow some others.
 # So we cant' regulate simply with the standard.
 set(CMAKE_CXX_STANDARD 14)
@@ -84,6 +86,7 @@ option(tensorflow_C_PACKAGE_PATH "Path to tensorflow C package installation dir"
 option(onnxruntime_ENABLE_LANGUAGE_INTEROP_OPS "Enable operator implemented in language other than cpp" OFF)
 option(onnxruntime_DEBUG_NODE_INPUTS_OUTPUTS "Dump node input shapes and output data to standard output when executing the model." OFF)
 option(onnxruntime_USE_DML "Build with DirectML support" OFF)
+option(onnxruntime_USE_MIGRAPHX "Build with AMDMIGraphX support" OFF)
 option(onnxruntime_USE_WINML "Build with WinML support" OFF)
 option(onnxruntime_USE_ACL "Build with ACL support" OFF)
 option(onnxruntime_USE_ACL_1902 "Build with ACL version 1902 support" OFF)
@@ -98,9 +101,14 @@ option(onnxruntime_USE_TELEMETRY "Build with Telemetry" OFF)
 option(onnxruntime_PREFER_SYSTEM_LIB "Experimental: Build with the preinstalled libraries in your system" OFF)
 
 # training options
+option(onnxruntime_ENABLE_NVTX_PROFILE "Enable NVTX profile." OFF)
 option(onnxruntime_ENABLE_TRAINING "Enable training functionality." OFF)
 option(onnxruntime_ENABLE_TRAINING_E2E_TESTS "Enable training end-to-end tests." OFF)
 option(onnxruntime_USE_HOROVOD "Build with HOROVOD support" OFF)
+
+if (onnxruntime_ENABLE_NVTX_PROFILE)
+  add_definitions(-DENABLE_NVTX_PROFILE=1)
+endif()
 
 set(protobuf_BUILD_TESTS OFF CACHE BOOL "Build protobuf tests" FORCE)
 #nsync tests failed on Mac Build
@@ -108,6 +116,9 @@ set(NSYNC_ENABLE_TESTS OFF CACHE BOOL "Build protobuf tests" FORCE)
 set(ONNX_ML 1)
 if(NOT onnxruntime_ENABLE_PYTHON)
   set(onnxruntime_ENABLE_LANGUAGE_INTEROP_OPS OFF)
+endif()
+if (onnxruntime_ENABLE_LANGUAGE_INTEROP_OPS)
+  add_compile_definitions(ENABLE_LANGUAGE_INTEROP_OPS)
 endif()
 
 # General C# properties
@@ -804,7 +815,13 @@ if (onnxruntime_USE_CUDA)
   set(CMAKE_CUDA_STANDARD 11)
   file(TO_CMAKE_PATH ${onnxruntime_CUDNN_HOME} onnxruntime_CUDNN_HOME)
   set(ONNXRUNTIME_CUDA_LIBRARIES ${CUDA_LIBRARIES})
-  list(APPEND ONNXRUNTIME_CUDA_LIBRARIES cublas cudnn curand cufft)
+
+  if (onnxruntime_ENABLE_NVTX_PROFILE)
+    list(APPEND ONNXRUNTIME_CUDA_LIBRARIES cublas cudnn curand cufft nvToolsExt)
+  else()
+    list(APPEND ONNXRUNTIME_CUDA_LIBRARIES cublas cudnn curand cufft)
+  endif()
+  
   if (WIN32)
     link_directories(${onnxruntime_CUDNN_HOME}/lib/x64)
 
@@ -841,6 +858,14 @@ if (onnxruntime_USE_TENSORRT)
   else()
     set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -Wno-deprecated-declarations")
   endif()
+endif()
+
+if (onnxruntime_USE_MIGRAPHX)
+  if (WIN32)
+    message(FATAL_ERROR "MIGraphX does not support build in Windows!")
+  endif()
+  set(AMD_MIGRAPHX_HOME ${onnxruntime_MIGRAPHX_HOME})
+  add_definitions(-DUSE_MIGRAPHX=1)
 endif()
 
 if (onnxruntime_USE_TVM)
@@ -979,6 +1004,11 @@ endif()
 if (onnxruntime_BUILD_JAVA)
   message(STATUS "Java Build is enabled")
   include(onnxruntime_java.cmake)
+endif()
+
+if (onnxruntime_BUILD_NODEJS)
+  message(STATUS "Node.js Build is enabled")
+  include(onnxruntime_nodejs.cmake)
 endif()
 
 # some of the tests rely on the shared libs to be

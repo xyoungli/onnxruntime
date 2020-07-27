@@ -40,6 +40,7 @@ jobs:
     OnnxRuntimeBuildDirectory: '$(Build.BinariesDirectory)'
     DotNetExe: 'dotnet.exe'
     CUDA_VERSION: ${{ parameters.CudaVersion }}
+    runCodesignValidationInjection: and(${{ parameters.DoNodejsPack }},${{ parameters. DoEsrp}}) #For the others, code sign is in a separated job
     DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
     ${{ if eq(parameters.EnableLto, true) }}:
       build_py_lto_flag: --enable_lto
@@ -61,6 +62,11 @@ jobs:
       displayName: 'Create TraceLoggingConfigPrivate.h For WinML Telemetry'
       env:
         TELEMETRYGUID: $(TELEMETRYGUID)
+
+    - task: NodeTool@0
+      inputs:
+        versionSpec: '12.x'
+
     - task: UsePythonVersion@0
       inputs: 
         versionSpec: '3.7' 
@@ -75,7 +81,7 @@ jobs:
         workingFolder: '$(Build.BinariesDirectory)'
 
     - script: |
-       python -m pip install -q pyopenssl setuptools wheel numpy scipy
+       python -m pip install -q pyopenssl setuptools wheel numpy
       workingDirectory: '$(Build.BinariesDirectory)'
       displayName: 'Install python modules'
 
@@ -146,15 +152,16 @@ jobs:
           arguments: '--configuration $(BuildConfig) -p:Platform="Any CPU" -p:OnnxRuntimeBuildDirectory="$(Build.BinariesDirectory)" -p:OrtPackageId=${{ parameters.OrtPackageId }}'
           workingDirectory: '$(Build.SourcesDirectory)\csharp'
 
-    - ${{ if and(eq(parameters.BuildCSharp, true), in(parameters['sln_platform'], 'Win32', 'x64')) }}:
-      - task: DotNetCoreCLI@2
-        displayName: 'Test C#'
-        inputs:
-          command: test
-          projects: '$(Build.SourcesDirectory)\csharp\test\Microsoft.ML.OnnxRuntime.Tests\Microsoft.ML.OnnxRuntime.Tests.csproj'
-          configuration: '$(BuildConfig)'
-          arguments: '--configuration $(BuildConfig) -p:Platform="Any CPU" -p:OnnxRuntimeBuildDirectory="$(Build.BinariesDirectory)" -p:OrtPackageId=${{ parameters.OrtPackageId }}'
-          workingDirectory: '$(Build.SourcesDirectory)\csharp'
+    - ${{ if in(parameters['sln_platform'], 'Win32', 'x64') }}:      
+      - ${{ if eq(parameters.BuildCSharp, true) }}:
+        - task: DotNetCoreCLI@2
+          displayName: 'Test C#'
+          inputs:
+            command: test
+            projects: '$(Build.SourcesDirectory)\csharp\test\Microsoft.ML.OnnxRuntime.Tests\Microsoft.ML.OnnxRuntime.Tests.csproj'
+            configuration: '$(BuildConfig)'
+            arguments: '--configuration $(BuildConfig) -p:Platform="Any CPU" -p:OnnxRuntimeBuildDirectory="$(Build.BinariesDirectory)" -p:OrtPackageId=${{ parameters.OrtPackageId }}'
+            workingDirectory: '$(Build.SourcesDirectory)\csharp'
 
       - ${{ if eq(parameters.RunTests, true) }}:
         - script: |
@@ -187,13 +194,14 @@ jobs:
           arguments: ${{ parameters.BuildArch }}
           modifyEnvironment: true
       # Esrp signing
-      - template: esrp_dll.yml
+      - template: win-esrp-dll.yml
         parameters:
-          FolderPath: '$(Build.BinariesDirectory)\$(BuildConfig)'
+          FolderPath: '$(Build.BinariesDirectory)\$(BuildConfig)\$(BuildConfig)'
           DisplayName: 'ESRP - Sign Native dlls'
           DoEsrp: ${{ parameters.DoEsrp }}
+          Pattern: 'onnx_test_runner.exe, onnxruntime_perf_test.exe,*.dll' #keep sync with src/Microsoft.ML.OnnxRuntime/Microsoft.ML.OnnxRuntime.csproj
 
-      - template: esrp_dll.yml
+      - template: win-esrp-dll.yml
         parameters:
           FolderPath: '$(Build.SourcesDirectory)\csharp\src\Microsoft.ML.OnnxRuntime\bin\$(BuildConfig)'
           DisplayName: 'ESRP - Sign C# dlls'
@@ -226,7 +234,7 @@ jobs:
           filename: 'C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Auxiliary\Build\vcvarsall.bat'
           arguments: ${{ parameters.BuildArch }}
           modifyEnvironment: true
-      - template: esrp_dll.yml
+      - template: win-esrp-dll.yml
         parameters:
           FolderPath: '$(Build.SourcesDirectory)\nodejs\bin\napi-v3\win32\x64'
           DisplayName: 'ESRP - Sign Node.js binding binaries'
@@ -237,7 +245,7 @@ jobs:
          del /Q $(Build.SourcesDirectory)\nodejs\bin\napi-v3\win32\x64\CodeSignSummary-*.*
          call npm pack
          copy $(Build.SourcesDirectory)\nodejs\onnxruntime-*.tgz $(Build.ArtifactStagingDirectory)
-         copy $(Build.SourcesDirectory)\nodejs\prebuilds $(Build.ArtifactStagingDirectory)
+         xcopy /E /I $(Build.SourcesDirectory)\nodejs\prebuilds $(Build.ArtifactStagingDirectory)\prebuilds
         workingDirectory: '$(Build.SourcesDirectory)\nodejs'
         displayName: 'Create NPM Package'
 
@@ -247,6 +255,13 @@ jobs:
           artifactName: ${{ parameters.ArtifactName }}
           targetPath: '$(Build.ArtifactStagingDirectory)'
 
+      # Put an unzipped version there to check if all the binaries are signed.
+      - script: |
+         7z x $(Build.ArtifactStagingDirectory)\prebuilds\onnxruntime-*.tar.gz
+         7z x $(Build.ArtifactStagingDirectory)\onnxruntime-*.tar
+        displayName: 'Unzip package to test'
+        workingDirectory: '$(Build.ArtifactStagingDirectory)'
+
     # Compliance tasks require logs from Debug Build
     - ${{ if eq(parameters['DoCompliance'], 'true') }}:
       - template: compliance.yml
@@ -255,4 +270,6 @@ jobs:
       parameters :
         condition : 'succeeded'
 
-    - template: clean-agent-build-directory-step.yml
+    - task: mspremier.PostBuildCleanup.PostBuildCleanup-task.PostBuildCleanup@3
+      displayName: 'Clean Agent Directories'
+      condition: always()

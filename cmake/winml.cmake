@@ -254,6 +254,10 @@ endif()
 
 add_library(winml_adapter ${winml_adapter_files})
 
+if (onnxruntime_WINML_NAMESPACE_OVERRIDE STREQUAL "Windows") 
+  target_compile_definitions(winml_adapter PRIVATE "BUILD_INBOX=1") 
+endif()
+
 # wil requires C++17
 set_target_properties(winml_adapter PROPERTIES CXX_STANDARD 17)
 set_target_properties(winml_adapter PROPERTIES CXX_STANDARD_REQUIRED ON)
@@ -627,6 +631,7 @@ target_link_libraries(winml_dll PRIVATE winml_lib_ort)
 target_link_libraries(winml_dll PRIVATE winml_lib_telemetry)
 
 target_link_libraries(winml_dll PRIVATE RuntimeObject.lib)
+target_link_libraries(winml_dll PRIVATE windowsapp.lib)
 
 # Any project that links in debug_alloc.obj needs this lib.
 # unresolved external symbol __imp_SymSetOptions

@@ -5,7 +5,6 @@ project (onnxruntime-node)
 set(CMAKE_CXX_STANDARD 14)
 
 add_compile_definitions(NAPI_VERSION=${napi_build_version})
-add_compile_definitions(NAPI_EXPERIMENTAL)
 
 # dist variables
 execute_process(COMMAND node -e "console.log(process.arch)"
@@ -27,7 +26,7 @@ endif()
 
 # include dirs
 include_directories(${CMAKE_JS_INC})
-include_directories(${CMAKE_SOURCE_DIR}/../include/onnxruntime)
+include_directories(${CMAKE_SOURCE_DIR}/../include/onnxruntime/core/session)
 include_directories(${CMAKE_SOURCE_DIR}/node_modules/node-addon-api)
 
 # source files

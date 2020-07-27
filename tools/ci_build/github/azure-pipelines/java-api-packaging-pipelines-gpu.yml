@@ -57,7 +57,7 @@ jobs:
         workingFolder: '$(Build.BinariesDirectory)'
 
     - script: |
-       python -m pip install -q pyopenssl setuptools wheel numpy scipy
+       python -m pip install -q pyopenssl setuptools wheel numpy
       workingDirectory: '$(Build.BinariesDirectory)'
       displayName: 'Install python modules' 
 
@@ -77,7 +77,7 @@ jobs:
       displayName: 'Generate cmake config'
       inputs:
         scriptPath: '$(Build.SourcesDirectory)\tools\ci_build\build.py'
-        arguments: '--config RelWithDebInfo --build_dir $(Build.BinariesDirectory) --skip_submodule_sync --build_java --build_shared_lib --update --cmake_generator "Visual Studio 16 2019" --enable_lto --use_openmp --build_shared_lib --enable_onnx_tests $(buildparameter)'
+        arguments: '--config RelWithDebInfo --build_dir $(Build.BinariesDirectory) --skip_submodule_sync --build_java --build_shared_lib --update --cmake_generator "Visual Studio 16 2019" --enable_lto --disable_rtti --use_openmp --build_shared_lib --enable_onnx_tests $(buildparameter)'
         workingDirectory: '$(Build.BinariesDirectory)'
 
  
@@ -97,7 +97,7 @@ jobs:
       displayName: 'test'
       inputs:
         scriptPath: '$(Build.SourcesDirectory)\tools\ci_build\build.py'
-        arguments: '--config RelWithDebInfo --build_dir $(Build.BinariesDirectory) --skip_submodule_sync --build_shared_lib --build_java --test --cmake_generator "Visual Studio 16 2019" --enable_lto --use_openmp --build_shared_lib --enable_onnx_tests $(buildparameter)'
+        arguments: '--config RelWithDebInfo --build_dir $(Build.BinariesDirectory) --skip_submodule_sync --build_shared_lib --build_java --test --cmake_generator "Visual Studio 16 2019" --enable_lto --disable_rtti --use_openmp --build_shared_lib --enable_onnx_tests $(buildparameter)'
         workingDirectory: '$(Build.BinariesDirectory)'
 
     - template: templates/java-api-artifacts-package-and-publish-steps-windows.yml
@@ -153,16 +153,17 @@ jobs:
   - task: CmdLine@2
     inputs:
       script: |
+        @echo on
         pushd onnxruntime-java-linux-x64-gpu
         jar uf  $(Build.BinariesDirectory)\java-artifact\onnxruntime-java-win-x64-gpu\testing.jar libcustom_op_library.so
         del /F /Q libcustom_op_library.so
         jar uf  $(Build.BinariesDirectory)\java-artifact\onnxruntime-java-win-x64-gpu\onnxruntime-$(OnnxRuntimeVersion).jar .
         popd
         pushd onnxruntime-java-win-x64-gpu
-        ren onnxruntime-$(OnnxRuntimeVersion).jar onnxruntime-gpu-$(OnnxRuntimeVersion).jar
-        ren onnxruntime-$(OnnxRuntimeVersion)-javadoc.jar onnxruntime-gpu-$(OnnxRuntimeVersion)-javadoc.jar
-        ren onnxruntime-$(OnnxRuntimeVersion)-sources.jar onnxruntime-gpu-$(OnnxRuntimeVersion)-sources.jar
-        ren onnxruntime-$(OnnxRuntimeVersion).pom onnxruntime-gpu-$(OnnxRuntimeVersion).pom
+        ren onnxruntime-$(OnnxRuntimeVersion).jar onnxruntime_gpu-$(OnnxRuntimeVersion).jar
+        ren onnxruntime-$(OnnxRuntimeVersion)-javadoc.jar onnxruntime_gpu-$(OnnxRuntimeVersion)-javadoc.jar
+        ren onnxruntime-$(OnnxRuntimeVersion)-sources.jar onnxruntime_gpu-$(OnnxRuntimeVersion)-sources.jar
+        ren onnxruntime-$(OnnxRuntimeVersion).pom onnxruntime_gpu-$(OnnxRuntimeVersion).pom
         popd
       workingDirectory: '$(Build.BinariesDirectory)\java-artifact'
       displayName: 'Create final GPU Jar'
@@ -211,7 +212,7 @@ jobs:
         popd
         powershell -Command "Invoke-WebRequest https://oss.sonatype.org/service/local/repositories/releases/content/org/junit/platform/junit-platform-console-standalone/1.6.2/junit-platform-console-standalone-1.6.2.jar -OutFile junit-platform-console-standalone-1.6.2.jar"
         powershell -Command "Invoke-WebRequest https://oss.sonatype.org/service/local/repositories/google-releases/content/com/google/protobuf/protobuf-java/3.9.2/protobuf-java-3.9.2.jar -OutFile protobuf-java-3.9.2.jar"
-        java -DUSE_CUDA=1 -jar junit-platform-console-standalone-1.6.2.jar -cp .;.\test;protobuf-java-3.9.2.jar;onnxruntime-gpu-$(OnnxRuntimeVersion).jar --scan-class-path --fail-if-no-tests --disable-banner
+        java -DUSE_CUDA=1 -jar junit-platform-console-standalone-1.6.2.jar -cp .;.\test;protobuf-java-3.9.2.jar;onnxruntime_gpu-$(OnnxRuntimeVersion).jar --scan-class-path --fail-if-no-tests --disable-banner
       workingDirectory: '$(Build.BinariesDirectory)\final-jar'
 
 - job: Final_Jar_Testing_Linux

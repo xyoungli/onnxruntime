@@ -22,16 +22,17 @@ set run_torchscript=false
 
 REM Devices to test.
 REM Attention: You cannot run both CPU and GPU at the same time: gpu need onnxruntime-gpu, and CPU need onnxruntime.
-set run_gpu_fp32=true
+set run_gpu_fp32=false
 set run_gpu_fp16=false
-set run_cpu=false
+set run_cpu_fp32=true
+set run_cpu_int8=true
 
 set average_over=100
 
 REM Enable optimizer (use script instead of OnnxRuntime for graph optimization)
 set use_optimizer=true
 
-set batch_sizes=1 16
+set batch_sizes=1
 set sequence_length=8 128
 
 REM Number of inputs (input_ids, token_type_ids, attention_mask) for ONNX model.
@@ -39,7 +40,7 @@ REM Note that different input count might lead to different performance
 set input_counts=1
 
 REM Pretrained transformers models can be a subset of: bert-base-cased roberta-base gpt2 distilgpt2 distilbert-base-uncased
-set models_to_test=bert-base-cased gpt2
+set models_to_test=bert-base-cased
 
 REM If you have mutliple GPUs, you can choose one GPU for test. Here is an example to use the second GPU:
 REM set CUDA_VISIBLE_DEVICES=1
@@ -48,20 +49,26 @@ REM This script will generate a logs file with a list of commands used in tests.
 >benchmark.log echo echo ort=%run_ort% torch=%run_torch% torchscript=%run_torchscript% gpu_fp32=%run_gpu_fp32% gpu_fp16=%run_gpu_fp16% cpu=%run_cpu% optimizer=%use_optimizer% batch="%batch_sizes%" sequence="%sequence_length%" models="%models_to_test%" input_counts="%input_counts%"
 
 REM Set it to false to skip testing. You can use it to dry run this script with the benchmark.log file.
-set run_tests=false
+set run_tests=true
 
 REM -------------------------------------------
-if %run_cpu% == true if %run_gpu_fp32% == true echo cannot test cpu and gpu at same time & goto :EOF
-if %run_cpu% == true if %run_gpu_fp16% == true echo cannot test cpu and gpu at same time & goto :EOF
+if %run_cpu_fp32% == true if %run_gpu_fp32% == true echo cannot test cpu and gpu at same time & goto :EOF
+if %run_cpu_fp32% == true if %run_gpu_fp16% == true echo cannot test cpu and gpu at same time & goto :EOF
+if %run_cpu_int8% == true if %run_gpu_fp32% == true echo cannot test cpu and gpu at same time & goto :EOF
+if %run_cpu_int8% == true if %run_gpu_fp16% == true echo cannot test cpu and gpu at same time & goto :EOF
 
 if %run_install% == true (
   pip uninstall --yes ort_nightly
   pip uninstall --yes onnxruntime
   pip uninstall --yes onnxruntime-gpu
-  if %run_cpu% == true (
+  if %run_cpu_fp32% == true (
     pip install onnxruntime
   ) else (
-    pip install --upgrade onnxruntime-gpu
+    if %run_cpu_fp32% == true (
+      pip install onnxruntime
+    ) else (
+      pip install --upgrade onnxruntime-gpu
+    )
   )
 
   pip install --upgrade onnxruntime-tools
@@ -94,14 +101,21 @@ if %run_gpu_fp32% == true (
 if %run_gpu_fp16% == true (
   for %%m in (%models_to_test%) DO (
     echo Run GPU FP16 Benchmark on model %%m
-    call :RunOneTest %%m -g --fp16
+    call :RunOneTest %%m -g -p fp16
   )
 )
 
-if %run_cpu% == true (
+if %run_cpu_fp32% == true (
   for %%m in (%models_to_test%) DO (
-    echo Run CPU Benchmark on model %%m
+    echo Run CPU FP32 Benchmark on model %%m
     call :RunOneTest %%m
+  )
+)
+
+if %run_cpu_int8% == true (
+  for %%m in (%models_to_test%) DO (
+    echo Run CPU Int8 Benchmark on model %%m
+    call :RunOneTest %%m -p int8
   )
 )
 
@@ -119,22 +133,22 @@ REM -----------------------------
 :RunOneTest
 
 if %run_ort% == true (
-  >>benchmark.log echo python %optimizer_script% -m %1 %onnx_export_options% %2 %3
-  >>benchmark.log echo python %optimizer_script% -m %1 %benchmark_options% %2 %3 -i %input_counts%
+  >>benchmark.log echo python %optimizer_script% -m %1 %onnx_export_options% %2 %3 %4
+  >>benchmark.log echo python %optimizer_script% -m %1 %benchmark_options% %2 %3 %4 -i %input_counts%
   if %run_tests%==true (
-    python %optimizer_script% -m %1 %onnx_export_options% %2 %3
-    python %optimizer_script% -m %1 %benchmark_options% %2 %3 -i %input_counts%
+    python %optimizer_script% -m %1 %onnx_export_options% %2 %3 %4
+    python %optimizer_script% -m %1 %benchmark_options% %2 %3 %4 -i %input_counts%
   )
 )
 
 if %run_torch% == true (
-  >>benchmark.log echo python %optimizer_script% -e torch -m %1 %benchmark_options% %2 %3
-  if %run_tests%==true python %optimizer_script% -e torch -m %1 %benchmark_options% %2 %3
+  >>benchmark.log echo python %optimizer_script% -e torch -m %1 %benchmark_options% %2 %3 %4
+  if %run_tests%==true python %optimizer_script% -e torch -m %1 %benchmark_options% %2 %3 %4
 )
   
 if %run_torchscript% == true (
-  >>benchmark.log echo python %optimizer_script% -e torchscript -m %1 %benchmark_options% %2 %3
-  if %run_tests%==true python %optimizer_script% -e torchscript -m %1 %benchmark_options% %2 %3
+  >>benchmark.log echo python %optimizer_script% -e torchscript -m %1 %benchmark_options% %2 %3 %4
+  if %run_tests%==true python %optimizer_script% -e torchscript -m %1 %benchmark_options% %2 %3 %4
 )
 
 goto :EOF
